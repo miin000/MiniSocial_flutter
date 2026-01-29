@@ -48,6 +48,9 @@ class AuthProvider with ChangeNotifier {
         _token = token;
         _user = UserModel.fromJson(jsonDecode(userJson));
 
+        // Set token cho ApiService
+        _authService.setToken(_token!);
+
         // Verify token với API
         final result = await _authService.getMe();
         if (result['success']) {
@@ -82,6 +85,9 @@ class AuthProvider with ChangeNotifier {
       _user = result['user'];
       _token = result['token'];
       _status = AuthStatus.authenticated;
+
+      // Set token cho ApiService
+      _authService.setToken(_token!);
 
       // Lưu user data
       await _saveUserData(_user!);

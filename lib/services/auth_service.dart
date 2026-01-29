@@ -7,6 +7,11 @@ import '../models/user_model.dart';
 class AuthService {
   final ApiService _apiService = ApiService();
 
+  // Set token cho ApiService
+  void setToken(String token) {
+    _apiService.setToken(token);
+  }
+
   // Đăng nhập
   Future<Map<String, dynamic>> login(String identifier, String password) async {
     try {
@@ -52,7 +57,6 @@ class AuthService {
     required String password,
   }) async {
     try {
-      print('Attempting register with email: $email, username: $username');
       await _apiService.post('/auth/register', data: {
         'email': email,
         'username': username,
@@ -65,9 +69,6 @@ class AuthService {
         'message': 'Đăng ký thành công! Vui lòng đăng nhập.',
       };
     } on DioException catch (e) {
-      print('DioException during register: ${e.message}');
-      print('Response: ${e.response?.data}');
-      print('Status code: ${e.response?.statusCode}');
       String message = 'Đăng ký thất bại';
       if (e.response?.data != null && e.response?.data['message'] != null) {
         message = e.response?.data['message'];
@@ -77,7 +78,6 @@ class AuthService {
         'message': message,
       };
     } catch (e) {
-      print('General exception during register: $e');
       return {
         'success': false,
         'message': 'Đã xảy ra lỗi: $e',

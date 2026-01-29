@@ -41,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
           textColor: Colors.white,
         );
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
+          Navigator.pushReplacementNamed(context, '/main');
         }
       } else {
         Fluttertoast.showToast(

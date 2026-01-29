@@ -12,7 +12,6 @@ class ApiService {
   String? _token;
 
   ApiService._internal() {
-    print('ApiService initializing with baseUrl: ${AppConfig.apiBaseUrl}');
     _dio = Dio(BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
       connectTimeout: const Duration(seconds: 10),
