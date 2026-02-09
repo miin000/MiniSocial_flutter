@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/api_service.dart';
 
 enum AuthStatus {
   initial,
@@ -48,9 +49,6 @@ class AuthProvider with ChangeNotifier {
         _token = token;
         _user = UserModel.fromJson(jsonDecode(userJson));
 
-        // Set token cho ApiService
-        _authService.setToken(_token!);
-
         // Verify token với API
         final result = await _authService.getMe();
         if (result['success']) {
@@ -67,6 +65,7 @@ class AuthProvider with ChangeNotifier {
         _status = AuthStatus.unauthenticated;
       }
     } catch (e) {
+      print('Error in checkAuthStatus: $e');
       _status = AuthStatus.unauthenticated;
     }
 
@@ -85,9 +84,6 @@ class AuthProvider with ChangeNotifier {
       _user = result['user'];
       _token = result['token'];
       _status = AuthStatus.authenticated;
-
-      // Set token cho ApiService
-      _authService.setToken(_token!);
 
       // Lưu user data
       await _saveUserData(_user!);
@@ -136,6 +132,10 @@ class AuthProvider with ChangeNotifier {
 
     await _authService.logout();
     await _clearUserData();
+
+    // ✅ CLEAR TOKEN KHỎI API SERVICE
+    final apiService = ApiService();
+    apiService.clearToken();
 
     _user = null;
     _token = null;
