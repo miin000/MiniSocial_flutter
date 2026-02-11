@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 // Providers
 import 'providers/auth_provider.dart';
 import 'providers/group_provider.dart';
+import 'providers/post_provider.dart';
 
 // Screens
 import 'screens/splash/splash_screen.dart';
@@ -27,6 +28,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => GroupProvider()),
+        ChangeNotifierProvider(create: (_) => PostProvider()),
       ],
       child: MaterialApp(
         title: 'MiniSocial',

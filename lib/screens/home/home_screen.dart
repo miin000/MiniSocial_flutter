@@ -4,289 +4,230 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/post_provider.dart';
+import 'create_post_screen.dart';
+import 'post_card.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('MiniSocial'),
-        backgroundColor: const Color(0xFF3b82f6),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          // Logout button
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _showLogoutDialog(context),
-            tooltip: 'Đăng xuất',
-          ),
-        ],
-      ),
-      drawer: _buildDrawer(context),
-      body: Consumer<AuthProvider>(
-        builder: (context, authProvider, child) {
-          final user = authProvider.user;
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              await authProvider.checkAuthStatus();
-            },
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Welcome Card
-                  Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF3b82f6), Color(0xFF8b5cf6)],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
+class _HomeScreenState extends State<HomeScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+ _loadPosts();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPosts() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final postProvider = Provider.of<PostProvider>(context, listen: false);
+    final userId = authProvider.user?.id;
+    await postProvider.loadPosts(refresh: true, userId: userId);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent * 0.9) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final postProvider = Provider.of<PostProvider>(context, listen: false);
+      final userId = authProvider.user?.id;
+      if (!postProvider.isLoading && postProvider.hasMore) {
+        postProvider.loadPosts(userId: userId);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer2<AuthProvider, PostProvider>(
+      builder: (context, authProvider, postProvider, child) {
+        final user = authProvider.user;
+
+        return Scaffold(
+          body: RefreshIndicator(
+            onRefresh: _loadPosts,
+            child: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                // Header with user info
+                SliverToBoxAdapter(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF3b82f6), Color(0xFF8b5cf6)],
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                    child: SafeArea(
+                      bottom: false,
+                      child: Row(
                         children: [
-                          Row(
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Colors.white,
+                            child: user?.avatar != null
+                                ? ClipOval(
+                                    child: Image.network(
+                                      user!.avatar!,
+                                      width: 48,
+                                      height: 48,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Text(
+                                          user.fullName?.substring(0, 1).toUpperCase() ?? 'U',
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            color: Color(0xFF3b82f6),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  )
+                                : Text(
+                                    user?.fullName?.substring(0, 1).toUpperCase() ?? 'U',
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      color: Color(0xFF3b82f6),
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Xin chào, ${user?.fullName ?? 'Người dùng'}!',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const Text(
+                                  'Bạn đang nghĩ gì?',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Create post button
+                SliverToBoxAdapter(
+                  child: Container(
+                    margin: const EdgeInsets.all(12),
+                    child: Card(
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const CreatePostScreen(),
+                            ),
+                          ).then((_) => _loadPosts());
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
                             children: [
-                              // Avatar
                               CircleAvatar(
-                                radius: 30,
-                                backgroundColor: Colors.white,
+                                radius: 20,
+                                backgroundColor: const Color(0xFF3b82f6),
                                 child: user?.avatar != null
                                     ? ClipOval(
                                         child: Image.network(
                                           user!.avatar!,
-                                          width: 60,
-                                          height: 60,
+                                          width: 40,
+                                          height: 40,
                                           fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (context, error, stackTrace) {
+                                          errorBuilder: (context, error, stackTrace) {
                                             return Text(
                                               user.fullName?.substring(0, 1).toUpperCase() ?? 'U',
-                                              style: const TextStyle(
-                                                fontSize: 24,
-                                                fontWeight: FontWeight.bold,
-                                                color: Color(0xFF3b82f6),
-                                              ),
+                                              style: const TextStyle(color: Colors.white),
                                             );
                                           },
                                         ),
                                       )
                                     : Text(
                                         user?.fullName?.substring(0, 1).toUpperCase() ?? 'U',
-                                        style: const TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF3b82f6),
-                                        ),
+                                        style: const TextStyle(color: Colors.white),
                                       ),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Xin chào,',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.white.withOpacity(0.8),
-                                      ),
-                                    ),
-                                    Text(
-                                      user?.fullName ?? 'Người dùng',
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Text(
+                                  'Bạn đang nghĩ gì?',
+                                  style: TextStyle(color: Colors.grey),
                                 ),
                               ),
+                              const Icon(Icons.image, color: Color(0xFF10b981)),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          // User info
-                          _buildInfoRow(Icons.email, user?.email ?? ''),
-                          const SizedBox(height: 8),
-                          _buildInfoRow(Icons.alternate_email, '@${user?.username ?? ''}'),
-                          if (user?.rolesGroup != null && user!.rolesGroup!.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            _buildInfoRow(
-                              Icons.group,
-                              'Nhóm: ${user.rolesGroup!.join(", ")}',
-                            ),
-                          ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+                ),
 
-  Widget _buildInfoRow(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.white70),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionCard(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 28),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1f2937),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF6b7280),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawer(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, authProvider, child) {
-        final user = authProvider.user;
-
-        return Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              // Drawer Header
-              UserAccountsDrawerHeader(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF3b82f6), Color(0xFF8b5cf6)],
-                  ),
-                ),
-                accountName: Text(
-                  user?.fullName ?? 'Người dùng',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                accountEmail: Text(user?.email ?? ''),
-                currentAccountPicture: CircleAvatar(
-                  backgroundColor: Colors.white,
-                  child: Text(
-                    user?.fullName?.substring(0, 1).toUpperCase() ?? 'U',
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF3b82f6),
+                // Posts list
+                if (postProvider.isLoading && postProvider.posts.isEmpty)
+                  const SliverFillRemaining(
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (postProvider.posts.isEmpty)
+                  const SliverFillRemaining(
+                    child: Center(
+                      child: Text(
+                        'Chưa có bài viết nào.\nHãy tạo bài viết đầu tiên!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          if (index < postProvider.posts.length) {
+                            return PostCard(post: postProvider.posts[index]);
+                          } else if (postProvider.hasMore) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                        childCount: postProvider.posts.length + 
+                            (postProvider.hasMore ? 1 : 0),
+                      ),
                     ),
                   ),
-                ),
-              ),
-
-              // Menu Items
-              ListTile(
-                leading: const Icon(Icons.home),
-                title: const Text('Trang chủ'),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.person),
-                title: const Text('Hồ sơ'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // TODO: Navigate to profile
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.settings),
-                title: const Text('Cài đặt'),
-                onTap: () {
-                  Navigator.pop(context);
-                  // TODO: Navigate to settings
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text(
-                  'Đăng xuất',
-                  style: TextStyle(color: Colors.red),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showLogoutDialog(context);
-                },
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
