@@ -18,6 +18,8 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard> {
+  int _currentImageIndex = 0; // Thêm biến theo dõi ảnh hiện tại
+  
   @override
   void initState() {
     super.initState();
@@ -220,25 +222,79 @@ class _PostCardState extends State<PostCard> {
           
           const SizedBox(height: 8),
 
-          // Post media
+          // Post media with carousel indicator
           if (widget.post.mediaUrls != null && widget.post.mediaUrls!.isNotEmpty)
-            SizedBox(
-              height: 300,
-              child: PageView.builder(
-                itemCount: widget.post.mediaUrls!.length,
-                itemBuilder: (context, index) {
-                  return CachedNetworkImage(
-                    imageUrl: widget.post.mediaUrls![index],
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => const Center(
-                      child: CircularProgressIndicator(),
+            Stack(
+              children: [
+                SizedBox(
+                  height: 300,
+                  child: PageView.builder(
+                    itemCount: widget.post.mediaUrls!.length,
+                    onPageChanged: (index) {
+                      setState(() {
+                        _currentImageIndex = index;
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      return CachedNetworkImage(
+                        imageUrl: widget.post.mediaUrls![index],
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                        errorWidget: (context, url, error) => const Center(
+                          child: Icon(Icons.error),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                // Hiển thị số thứ tự ảnh nếu có nhiều hơn 1 ảnh
+                if (widget.post.mediaUrls!.length > 1)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_currentImageIndex + 1}/${widget.post.mediaUrls!.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                    errorWidget: (context, url, error) => const Center(
-                      child: Icon(Icons.error),
+                  ),
+                // Hiển thị dots indicator nếu có nhiều hơn 1 ảnh
+                if (widget.post.mediaUrls!.length > 1)
+                  Positioned(
+                    bottom: 8,
+                    left: 0,
+                    right: 0,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        widget.post.mediaUrls!.length,
+                        (index) => Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _currentImageIndex == index
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.4),
+                          ),
+                        ),
+                      ),
                     ),
-                  );
-                },
-              ),
+                  ),
+              ],
             ),
 
           const SizedBox(height: 8),

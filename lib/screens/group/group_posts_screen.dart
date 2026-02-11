@@ -1,6 +1,7 @@
 // lib/screens/group/group_posts_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class GroupPostsScreen extends StatefulWidget {
   final String groupId;
@@ -14,6 +15,7 @@ class GroupPostsScreen extends StatefulWidget {
 class _GroupPostsScreenState extends State<GroupPostsScreen> {
   bool _isLoading = false;
   final List<Map<String, dynamic>> _posts = [];
+  final Map<int, int> _currentImageIndexes = {}; // Theo dõi index ảnh của từng post
 
   @override
   void initState() {
@@ -96,6 +98,9 @@ class _GroupPostsScreenState extends State<GroupPostsScreen> {
   }
 
   Widget _buildPostCard(BuildContext context, Map<String, dynamic> post) {
+    final int postIndex = _posts.indexOf(post);
+    final currentImageIndex = _currentImageIndexes[postIndex] ?? 0;
+    
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Padding(
@@ -139,6 +144,85 @@ class _GroupPostsScreenState extends State<GroupPostsScreen> {
               style: const TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 12),
+            
+            // Hiển thị ảnh với carousel nếu có
+            if (post['media_urls'] != null && (post['media_urls'] as List).isNotEmpty)
+              Stack(
+                children: [
+                  SizedBox(
+                    height: 300,
+                    child: PageView.builder(
+                      itemCount: (post['media_urls'] as List).length,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentImageIndexes[postIndex] = index;
+                        });
+                      },
+                      itemBuilder: (context, index) {
+                        return CachedNetworkImage(
+                          imageUrl: (post['media_urls'] as List)[index],
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                          errorWidget: (context, url, error) => const Center(
+                            child: Icon(Icons.error),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  // Hiển thị số thứ tự ảnh nếu có nhiều hơn 1 ảnh
+                  if ((post['media_urls'] as List).length > 1)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${currentImageIndex + 1}/${(post['media_urls'] as List).length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  // Hiển thị dots indicator nếu có nhiều hơn 1 ảnh
+                  if ((post['media_urls'] as List).length > 1)
+                    Positioned(
+                      bottom: 8,
+                      left: 0,
+                      right: 0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          (post['media_urls'] as List).length,
+                          (index) => Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: currentImageIndex == index
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.4),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            
+            if (post['media_urls'] != null && (post['media_urls'] as List).isNotEmpty)
+              const SizedBox(height: 12),
+            
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [

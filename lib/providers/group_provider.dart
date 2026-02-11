@@ -66,10 +66,8 @@ class GroupProvider with ChangeNotifier {
 
     final result = await _groupService.createGroup(name, description, avatar);
 
-    if (result['success']) {
-      await fetchGroups();
-    }
-
+    // Không cần fetch ở đây nữa vì screen sẽ tự fetch sau khi tạo thành công
+    
     _isLoading = false;
     notifyListeners();
     return result;

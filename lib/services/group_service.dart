@@ -62,8 +62,20 @@ class GroupService {
       print('✅ GroupService: Response status code: ${response.statusCode}');
       print('✅ GroupService: Response data: ${response.data}');
 
-      final myGroupsJson = response.data['myGroups'] as List<dynamic>? ?? [];
-      final suggestedGroupsJson = response.data['suggestedGroups'] as List<dynamic>? ?? [];
+      List<dynamic> myGroupsJson = [];
+      List<dynamic> suggestedGroupsJson = [];
+
+      // Xử lý cả hai format: object hoặc array
+      if (response.data is List) {
+        // API trả về array trực tiếp
+        print('📊 GroupService: Response is List, treating as myGroups');
+        myGroupsJson = response.data as List<dynamic>;
+      } else if (response.data is Map) {
+        // API trả về object với keys myGroups và suggestedGroups
+        print('📊 GroupService: Response is Map, extracting myGroups and suggestedGroups');
+        myGroupsJson = response.data['myGroups'] as List<dynamic>? ?? [];
+        suggestedGroupsJson = response.data['suggestedGroups'] as List<dynamic>? ?? [];
+      }
 
       print('📊 GroupService: myGroupsJson length: ${myGroupsJson.length}');
       print('📊 GroupService: suggestedGroupsJson length: ${suggestedGroupsJson.length}');

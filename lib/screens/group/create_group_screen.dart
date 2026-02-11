@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../providers/group_provider.dart';
+import '../../providers/auth_provider.dart';
 
 class CreateGroupScreen extends StatefulWidget {
   const CreateGroupScreen({super.key});
@@ -51,6 +52,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
 
     try {
       final groupProvider = Provider.of<GroupProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      
       final result = await groupProvider.createGroup(
         _nameController.text.trim(),
         _descController.text.trim(),
@@ -60,11 +63,16 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       if (!mounted) return;
 
       if (result['success']) {
+        // Force refresh danh sách nhóm sau khi tạo thành công
+        await groupProvider.fetchGroups(authProvider: authProvider);
+        
+        if (!mounted) return;
+        
         Fluttertoast.showToast(
           msg: 'Tạo nhóm thành công! 🎉',
           backgroundColor: Colors.green,
         );
-        Navigator.pop(context);
+        Navigator.pop(context, true); // Trả về true để báo đã tạo thành công
       } else {
         final statusCode = result['statusCode'] as int?;
         final message = result['message'] ?? 'Lỗi không xác định';

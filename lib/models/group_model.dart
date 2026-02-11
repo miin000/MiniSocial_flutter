@@ -63,45 +63,71 @@ class GroupModel {
   });
 
   factory GroupModel.fromJson(Map<String, dynamic> json) {
-    final membersList = (json['members'] as List<dynamic>?) ?? [];
-    final ownerId = json['owner_id'] as String? ?? json['creator_id'] as String?;
-    final membersWithRoles = json['membersWithRoles'] as List<dynamic>?;
-    
-    List<Map<String, dynamic>> members = [];
+    try {
+      final membersList = (json['members'] as List<dynamic>?) ?? [];
+      final ownerId = json['owner_id']?.toString() ?? json['creator_id']?.toString() ?? json['ownerId']?.toString();
+      final membersWithRoles = json['membersWithRoles'] as List<dynamic>?;
+      
+      List<Map<String, dynamic>> members = [];
 
-    if (membersWithRoles != null && membersWithRoles.isNotEmpty) {
-      // Backend trả full member info
-      members = membersWithRoles
-          .map((m) => {
-            'userId': m['user_id']?.toString() ?? m['userId']?.toString() ?? '',
-            'role': m['role'] ?? 'member',
-            'fullName': m['fullName'] ?? m['full_name'] ?? '',
-            'avatar': m['avatar'] ?? m['avatar_url'],
-            'email': m['email'] ?? '',
-          })
-          .toList();
-    } else if (membersList.isNotEmpty) {
-      // Backend trả array of string (user IDs)
-      members = membersList
-          .map((id) => {
-            'userId': id.toString(),
-            'role': ownerId == id.toString() ? 'owner' : 'member',
-          })
-          .toList();
+      if (membersWithRoles != null && membersWithRoles.isNotEmpty) {
+        // Backend trả full member info
+        members = membersWithRoles
+            .map((m) => {
+              'userId': m['user_id']?.toString() ?? m['userId']?.toString() ?? '',
+              'role': m['role']?.toString() ?? 'member',
+              'fullName': m['fullName']?.toString() ?? m['full_name']?.toString() ?? '',
+              'avatar': m['avatar']?.toString() ?? m['avatar_url']?.toString() ?? '',
+              'email': m['email']?.toString() ?? '',
+            })
+            .toList();
+      } else if (membersList.isNotEmpty) {
+        // Backend trả array of string (user IDs)
+        members = membersList
+            .map((id) => {
+              'userId': id.toString(),
+              'role': ownerId == id.toString() ? 'owner' : 'member',
+            })
+            .toList();
+      }
+
+      // Parse memberCount với fallback
+      int memberCount = 0;
+      if (json['members_count'] != null) {
+        memberCount = int.tryParse(json['members_count'].toString()) ?? 0;
+      } else if (json['memberCount'] != null) {
+        memberCount = int.tryParse(json['memberCount'].toString()) ?? 0;
+      } else {
+        memberCount = membersList.length;
+      }
+
+      return GroupModel(
+        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        description: json['description']?.toString() ?? '',
+        avatar: json['avatar_url']?.toString() ?? json['avatar']?.toString(),
+        ownerId: ownerId,
+        members: members,
+        memberCount: memberCount,
+        isJoined: true,
+        createdAt: json['created_at'] != null 
+            ? DateTime.tryParse(json['created_at'].toString()) 
+            : null,
+        updatedAt: json['updated_at'] != null 
+            ? DateTime.tryParse(json['updated_at'].toString()) 
+            : null,
+      );
+    } catch (e) {
+      print('❌ GroupModel.fromJson error: $e');
+      print('❌ Problematic JSON: $json');
+      // Return a minimal valid GroupModel instead of crashing
+      return GroupModel(
+        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+        name: json['name']?.toString() ?? 'Unknown Group',
+        description: json['description']?.toString() ?? '',
+        memberCount: 0,
+      );
     }
-
-    return GroupModel(
-      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
-      avatar: json['avatar_url'] ?? json['avatar'],
-      ownerId: ownerId,
-      members: members,
-      memberCount: json['members_count'] ?? json['memberCount'] ?? membersList.length,
-      isJoined: true,
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at'].toString()) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at'].toString()) : null,
-    );
   }
 
   Map<String, dynamic> toJson() {
