@@ -3,6 +3,7 @@ import '../../models/group_model.dart';
 import '../../models/group_post_model.dart';
 import 'package:provider/provider.dart';
 import '../../providers/group_provider.dart';
+import '../../providers/auth_provider.dart';
 import 'group_settings_screen.dart';
 import 'create_post_in_group_screen.dart';
 
@@ -27,17 +28,36 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   void initState() {
     super.initState();
     group = widget.group;
+    // Fetch latest group detail (members + updated role info) after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final gp = Provider.of<GroupProvider>(context, listen: false);
+      gp.fetchGroupDetail(group.id).then((_) {
+        if (mounted && gp.currentGroup != null) {
+          setState(() {
+            group = gp.currentGroup!;
+          });
+        }
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final isOwner = group.ownerId != null &&
-        widget.currentUserId.isNotEmpty &&
-        group.ownerId.toString() == widget.currentUserId.toString();
+    final gp = Provider.of<GroupProvider>(context);
+    final currentGroup = gp.currentGroup ?? group;
+    final currentUserId = widget.currentUserId.isNotEmpty
+        ? widget.currentUserId
+        : (Provider.of<AuthProvider>(context, listen: false).user?.id ?? '');
+
+    // isOwner: check via creator_id match OR backend returned userRole == ADMIN
+    final isOwner = gp.isCurrentUserAdmin ||
+        (currentGroup.ownerId != null &&
+            currentUserId.isNotEmpty &&
+            currentGroup.ownerId.toString() == currentUserId);
 
     final userRole = isOwner
-        ? MemberRole.admin
-        : group.getUserRole(widget.currentUserId);
+        ? MemberRole.owner
+        : currentGroup.getUserRole(currentUserId);
 
     return DefaultTabController(
       length: 3,
@@ -336,34 +356,98 @@ class _MembersTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final gp = Provider.of<GroupProvider>(context);
     final current = gp.currentGroup ?? group;
-    final members = (gp.groupMembers.isNotEmpty) ? gp.groupMembers : current.members;
+    final members = gp.groupMembers.isNotEmpty ? gp.groupMembers : current.members;
+
+    if (gp.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     if (members.isEmpty) {
       return const Center(child: Text('Chưa có thành viên'));
     }
 
+    // Sắp xếp: ADMIN trước, MODERATOR, rồi MEMBER
+    final sorted = [...members];
+    const roleOrder = {'ADMIN': 0, 'MODERATOR': 1, 'MEMBER': 2};
+    sorted.sort((a, b) {
+      final aR = (a['role']?.toString().toUpperCase() ?? 'MEMBER');
+      final bR = (b['role']?.toString().toUpperCase() ?? 'MEMBER');
+      return (roleOrder[aR] ?? 2).compareTo(roleOrder[bR] ?? 2);
+    });
+
     return ListView.separated(
       padding: const EdgeInsets.all(12),
-      itemCount: members.length,
-      separatorBuilder: (_, __) => const Divider(),
+      itemCount: sorted.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        final m = members[index];
+        final m = sorted[index];
+        final Map<String, dynamic>? userObj =
+            m['user'] != null ? Map<String, dynamic>.from(m['user'] as Map) : null;
 
-        // Thử lấy thông tin user theo các format khác nhau
-        final Map? userObj = m['user'] as Map?;
-        final String memberId = m['userId']?.toString() ?? m['user_id']?.toString() ?? userObj?['_id']?.toString() ?? userObj?['id']?.toString() ?? '';
-        final String name = (userObj?['fullName'] ?? userObj?['username'] ?? userObj?['name'] ?? m['fullName'] ?? m['username'] ?? memberId).toString();
-        final String avatar = (userObj?['avatar'] ?? userObj?['avatar_url'] ?? m['avatar'] ?? m['avatar_url'] ?? '').toString();
-        final String role = (m['role'] ?? m['role_name'] ?? (memberId == current.ownerId ? 'owner' : 'member')).toString();
+        final String memberId =
+            m['userId']?.toString() ??
+            m['user_id']?.toString() ??
+            userObj?['_id']?.toString() ?? '';
+
+        final String name = (userObj?['fullName'] ??
+            userObj?['username'] ??
+            m['fullName'] ?? m['username'] ?? memberId).toString();
+
+        final String avatarUrl = (userObj?['avatarUrl'] ??
+            userObj?['avatar_url'] ??
+            userObj?['avatar'] ??
+            m['avatar_url'] ?? m['avatar'] ?? '').toString();
+
+        final String roleRaw =
+            (m['role']?.toString().toUpperCase() ?? 'MEMBER');
+
+        // Check creator via ownerId fallback
+        final bool isCreator = memberId.isNotEmpty &&
+            memberId == current.ownerId;
+        final effectiveRole = isCreator ? 'ADMIN' : roleRaw;
+
+        final (String roleLabel, Color roleColor, IconData roleIcon) =
+            switch (effectiveRole) {
+          'ADMIN' => ('Trưởng nhóm', Colors.amber[700]!, Icons.verified),
+          'MODERATOR' => ('Quản trị viên', Colors.blue[600]!, Icons.shield),
+          _ => ('Thành viên', Colors.grey[600]!, Icons.person),
+        };
 
         return ListTile(
           leading: CircleAvatar(
-            backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
-            child: avatar.isEmpty ? Text(name.isNotEmpty ? name[0].toUpperCase() : 'U') : null,
+            radius: 22,
+            backgroundImage:
+                avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+            child: avatarUrl.isEmpty
+                ? Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  )
+                : null,
           ),
-          title: Text(name),
-          subtitle: Text(role == 'owner' ? 'Trưởng nhóm' : role == 'admin' ? 'Quản trị viên' : 'Thành viên'),
-          trailing: role == 'owner' ? const Icon(Icons.verified, color: Colors.amber) : null,
+          title: Text(
+            name,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Row(
+            children: [
+              Icon(roleIcon, size: 14, color: roleColor),
+              const SizedBox(width: 4),
+              Text(
+                roleLabel,
+                style: TextStyle(
+                  color: roleColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          trailing: effectiveRole == 'ADMIN'
+              ? const Icon(Icons.verified, color: Colors.amber)
+              : effectiveRole == 'MODERATOR'
+                  ? const Icon(Icons.shield, color: Colors.blue, size: 18)
+                  : null,
         );
       },
     );
@@ -380,23 +464,39 @@ class _InfoTab extends StatelessWidget {
     final gp = Provider.of<GroupProvider>(context);
     final current = gp.currentGroup ?? group;
 
+    // Find owner from gp.groupMembers (fetched from API) first, then fallback to current.members
+    final allMembers = gp.groupMembers.isNotEmpty ? gp.groupMembers : current.members;
+
     Map<String, dynamic>? ownerMember;
     try {
-      final found = current.members.firstWhere((m) {
-        final String uid = m['userId']?.toString() ?? m['user']?['_id']?.toString() ?? '';
-        return uid == current.ownerId;
+      final found = allMembers.firstWhere((m) {
+        final String uid = m['userId']?.toString() ?? m['user_id']?.toString() ?? '';
+        final String role = (m['role']?.toString().toUpperCase() ?? '');
+        // Match by ownerId OR by ADMIN role
+        return uid == current.ownerId || role == 'ADMIN';
       });
       if (found is Map<String, dynamic>) ownerMember = found;
     } catch (_) {
       ownerMember = null;
     }
 
-    String ownerName = current.ownerId ?? 'Không có';
+    String ownerName = 'Không có';
     String ownerAvatar = '';
     if (ownerMember != null) {
-      final Map? userObj = ownerMember['user'] as Map?;
-      ownerName = (userObj?['fullName'] ?? userObj?['username'] ?? ownerName).toString();
-      ownerAvatar = (userObj?['avatar'] ?? userObj?['avatar_url'] ?? '').toString();
+      final Map<String, dynamic>? userObj = ownerMember['user'] != null
+          ? Map<String, dynamic>.from(ownerMember['user'] as Map)
+          : null;
+      ownerName = (userObj?['fullName'] ??
+          userObj?['username'] ??
+          ownerMember['fullName'] ??
+          ownerMember['username'] ??
+          current.ownerId ??
+          'Không có').toString();
+      ownerAvatar = (userObj?['avatarUrl'] ??
+          userObj?['avatar_url'] ??
+          userObj?['avatar'] ??
+          ownerMember['avatar_url'] ??
+          ownerMember['avatar'] ?? '').toString();
     }
 
     return SingleChildScrollView(

@@ -87,6 +87,8 @@ class GroupModel {
       }
     } else if (json['owner_id'] != null) {
       parsedOwnerId = json['owner_id'].toString();
+    } else if (json['creator_id'] != null) {
+      parsedOwnerId = json['creator_id'].toString();
     } else if (json['owner'] != null) {
       if (json['owner'] is Map) {
         parsedOwnerId = json['owner']['_id']?.toString();
@@ -164,16 +166,16 @@ class GroupModel {
       return MemberRole.owner;
     }
 
-    // 🔥 Check trong members (ép string 100%)
+    // 🔥 Check trong members (ép string 100%, case-insensitive)
     for (var m in members) {
       final memberUserId = m['userId']?.toString() ??
           m['user_id']?.toString();
 
       if (memberUserId == uid) {
-        final role = m['role']?.toString();
+        final role = (m['role']?.toString() ?? '').toUpperCase();
 
-        if (role == 'owner') return MemberRole.owner;
-        if (role == 'admin') return MemberRole.admin;
+        if (role == 'ADMIN') return MemberRole.owner;
+        if (role == 'MODERATOR') return MemberRole.admin;
         return MemberRole.member;
       }
     }

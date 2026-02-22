@@ -235,18 +235,33 @@ class GroupService {
   Future<Map<String, dynamic>> getGroupDetail(String groupId) async {
     try {
       final response = await _apiService.get('/groups/$groupId');
-      final groupJson = response.data['group'] as Map<String, dynamic>? ?? {};
-      final membersJson = response.data['members'] as List<dynamic>? ?? [];
-      
+
+      // Backend returns { group: {...}, members: [...], userRole: '...', isMember: bool }
+      final data = response.data;
+      print('🔍 GroupService getGroupDetail: data keys = ${data is Map ? data.keys.toList() : data.runtimeType}');
+      print('🔍 GroupService getGroupDetail: members = ${data is Map ? data['members']?.runtimeType : "n/a"}, count = ${data is Map && data['members'] is List ? (data['members'] as List).length : 0}');
+
+      final groupJson = (data is Map && data['group'] != null)
+          ? Map<String, dynamic>.from(data['group'] as Map)
+          : (data is Map ? Map<String, dynamic>.from(data as Map) : <String, dynamic>{});
+
+      final membersRaw = (data is Map && data['members'] is List)
+          ? data['members'] as List<dynamic>
+          : <dynamic>[];
+
+      final userRole = data is Map ? (data['userRole']?.toString()) : null;
+
       final group = GroupModel.fromJson(groupJson);
-      final members = membersJson
-          .map((m) => m as Map<String, dynamic>)
+      // Use Map.from() to safely convert each member from LinkedHashMap to Map<String, dynamic>
+      final members = membersRaw
+          .map((m) => Map<String, dynamic>.from(m as Map))
           .toList();
 
       return {
         'success': true,
         'group': group,
         'members': members,
+        'userRole': userRole,
       };
     } on DioException catch (e) {
       String message = 'Lỗi tải chi tiết nhóm';

@@ -11,6 +11,7 @@ class GroupProvider with ChangeNotifier {
   List<GroupModel> _suggestedGroups = [];
   GroupModel? _currentGroup;
   List<Map<String, dynamic>> _groupMembers = [];
+  String? _currentUserRole; // 'ADMIN', 'MODERATOR', 'MEMBER' from backend
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -18,8 +19,14 @@ class GroupProvider with ChangeNotifier {
   List<GroupModel> get suggestedGroups => _suggestedGroups;
   GroupModel? get currentGroup => _currentGroup;
   List<Map<String, dynamic>> get groupMembers => _groupMembers;
+  String? get currentUserRole => _currentUserRole;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  /// Returns true if the current user is the group admin/owner
+  bool get isCurrentUserAdmin =>
+      _currentUserRole != null &&
+      _currentUserRole!.toUpperCase() == 'ADMIN';
 
   Future<void> fetchGroups({AuthProvider? authProvider, bool isRetry = false}) async {
     if (_isLoading && !isRetry) {
@@ -146,7 +153,15 @@ class GroupProvider with ChangeNotifier {
 
     if (result['success']) {
       _currentGroup = result['group'] as GroupModel;
-      _groupMembers = result['members'] as List<Map<String, dynamic>>? ?? [];
+      // Safely convert List<dynamic> → List<Map<String, dynamic>>
+      final rawMembers = result['members'];
+      _groupMembers = rawMembers is List
+          ? rawMembers
+              .map((m) => Map<String, dynamic>.from(m as Map))
+              .toList()
+          : <Map<String, dynamic>>[];
+      print('✅ GroupProvider fetchGroupDetail: ${_groupMembers.length} members loaded');
+      _currentUserRole = result['userRole'] as String?;
       _errorMessage = null;
     } else {
       _errorMessage = result['message'] ?? 'Không thể tải chi tiết group';
