@@ -1,5 +1,7 @@
 // lib/models/group_model.dart
 
+import 'group_post_model.dart';
+
 enum MemberRole { owner, admin, member }
 
 extension MemberRoleExtension on MemberRole {
@@ -19,7 +21,7 @@ extension MemberRoleExtension on MemberRole {
       case MemberRole.owner:
         return 'Trưởng nhóm';
       case MemberRole.admin:
-        return 'Quản trị';
+        return 'Quản trị viên';
       case MemberRole.member:
         return 'Thành viên';
     }
@@ -35,6 +37,11 @@ extension MemberRoleExtension on MemberRole {
         return '👤';
     }
   }
+
+  bool get isLeader => this == MemberRole.owner;
+
+  bool get isAdmin =>
+      this == MemberRole.owner || this == MemberRole.admin;
 }
 
 class GroupModel {
@@ -48,6 +55,7 @@ class GroupModel {
   final bool isJoined;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final List<GroupPostModel> posts;
 
   GroupModel({
     required this.id,
@@ -60,131 +68,126 @@ class GroupModel {
     this.isJoined = false,
     this.createdAt,
     this.updatedAt,
+    this.posts = const [],
   });
 
+  // ================= FIX CHUẨN OWNER =================
+
   factory GroupModel.fromJson(Map<String, dynamic> json) {
-    try {
-      final membersList = (json['members'] as List<dynamic>?) ?? [];
-      final ownerId = json['owner_id']?.toString() ?? json['creator_id']?.toString() ?? json['ownerId']?.toString();
-      final membersWithRoles = json['membersWithRoles'] as List<dynamic>?;
-      
-      List<Map<String, dynamic>> members = [];
+    final membersJson = json['members'] as List<dynamic>? ?? [];
 
-      if (membersWithRoles != null && membersWithRoles.isNotEmpty) {
-        // Backend trả full member info
-        members = membersWithRoles
-            .map((m) => {
-              'userId': m['user_id']?.toString() ?? m['userId']?.toString() ?? '',
-              'role': m['role']?.toString() ?? 'member',
-              'fullName': m['fullName']?.toString() ?? m['full_name']?.toString() ?? '',
-              'avatar': m['avatar']?.toString() ?? m['avatar_url']?.toString() ?? '',
-              'email': m['email']?.toString() ?? '',
-            })
-            .toList();
-      } else if (membersList.isNotEmpty) {
-        // Backend trả array of string (user IDs)
-        members = membersList
-            .map((id) => {
-              'userId': id.toString(),
-              'role': ownerId == id.toString() ? 'owner' : 'member',
-            })
-            .toList();
-      }
+    // 🔥 FIX ownerId mọi trường hợp backend
+    String? parsedOwnerId;
 
-      // Parse memberCount với fallback
-      int memberCount = 0;
-      if (json['members_count'] != null) {
-        memberCount = int.tryParse(json['members_count'].toString()) ?? 0;
-      } else if (json['memberCount'] != null) {
-        memberCount = int.tryParse(json['memberCount'].toString()) ?? 0;
+    if (json['ownerId'] != null) {
+      if (json['ownerId'] is Map) {
+        parsedOwnerId = json['ownerId']['_id']?.toString();
       } else {
-        memberCount = membersList.length;
+        parsedOwnerId = json['ownerId'].toString();
       }
-
-      return GroupModel(
-        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-        name: json['name']?.toString() ?? '',
-        description: json['description']?.toString() ?? '',
-        avatar: json['avatar_url']?.toString() ?? json['avatar']?.toString(),
-        ownerId: ownerId,
-        members: members,
-        memberCount: memberCount,
-        isJoined: true,
-        createdAt: json['created_at'] != null 
-            ? DateTime.tryParse(json['created_at'].toString()) 
-            : null,
-        updatedAt: json['updated_at'] != null 
-            ? DateTime.tryParse(json['updated_at'].toString()) 
-            : null,
-      );
-    } catch (e) {
-      print('❌ GroupModel.fromJson error: $e');
-      print('❌ Problematic JSON: $json');
-      // Return a minimal valid GroupModel instead of crashing
-      return GroupModel(
-        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-        name: json['name']?.toString() ?? 'Unknown Group',
-        description: json['description']?.toString() ?? '',
-        memberCount: 0,
-      );
+    } else if (json['owner_id'] != null) {
+      parsedOwnerId = json['owner_id'].toString();
+    } else if (json['owner'] != null) {
+      if (json['owner'] is Map) {
+        parsedOwnerId = json['owner']['_id']?.toString();
+      } else {
+        parsedOwnerId = json['owner'].toString();
+      }
     }
+
+    return GroupModel(
+      id: json['_id']?.toString() ??
+          json['id']?.toString() ??
+          '',
+      name: json['name']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      avatar: json['avatar_url']?.toString() ??
+          json['avatar']?.toString(),
+      ownerId: parsedOwnerId,
+      members: membersJson
+          .map((m) => m as Map<String, dynamic>)
+          .toList(),
+      memberCount: json['members_count'] ??
+          json['memberCount'] ??
+          membersJson.length,
+      isJoined: true,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'])
+          : null,
+      updatedAt: json['updated_at'] != null
+          ? DateTime.tryParse(json['updated_at'])
+          : null,
+      posts: (json['posts'] as List<dynamic>?)
+          ?.map((p) =>
+          GroupPostModel.fromJson(p))
+          .toList() ??
+          [],
+    );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'name': name,
       'description': description,
-      'avatar': avatar,
+      'avatar_url': avatar,
     };
   }
 
+  GroupModel copyWith({
+    String? name,
+    String? description,
+    String? avatar,
+    List<GroupPostModel>? posts,
+  }) {
+    return GroupModel(
+      id: id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      avatar: avatar ?? this.avatar,
+      ownerId: ownerId,
+      members: members,
+      memberCount: memberCount,
+      isJoined: isJoined,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      posts: posts ?? this.posts,
+    );
+  }
+
+  // ================= FIX ROLE LOGIC =================
+
   MemberRole getUserRole(String userId) {
-    if (userId == ownerId) return MemberRole.owner;
-    
-    final member = members.firstWhere(
-      (m) => m['userId'] == userId,
-      orElse: () => {},
-    );
-    
-    if (member.isEmpty) return MemberRole.member;
-    
-    final role = member['role'] as String?;
-    return MemberRole.values.firstWhere(
-      (r) => r.name == role,
-      orElse: () => MemberRole.member,
-    );
+    final uid = userId.toString();
+
+    // 🔥 ƯU TIÊN OWNER TRƯỚC
+    if (ownerId != null && ownerId!.toString() == uid) {
+      return MemberRole.owner;
+    }
+
+    // 🔥 Check trong members (ép string 100%)
+    for (var m in members) {
+      final memberUserId = m['userId']?.toString() ??
+          m['user_id']?.toString();
+
+      if (memberUserId == uid) {
+        final role = m['role']?.toString();
+
+        if (role == 'owner') return MemberRole.owner;
+        if (role == 'admin') return MemberRole.admin;
+        return MemberRole.member;
+      }
+    }
+
+    return MemberRole.member;
   }
 
-  bool isOwner(String userId) => userId == ownerId;
+  bool isOwner(String userId) =>
+      ownerId != null && ownerId!.toString() == userId.toString();
 
-  bool isAdmin(String userId) {
-    final role = getUserRole(userId);
-    return role == MemberRole.admin || role == MemberRole.owner;
-  }
+  bool isAdminUser(String userId) =>
+      getUserRole(userId).isAdmin;
 
-  bool canManageMembers(String userId) => isAdmin(userId);
+  String? get coverUrl => avatar;
 
-  bool canDeleteGroup(String userId) => isOwner(userId);
-
-  bool canEditGroupInfo(String userId) => isAdmin(userId);
-
-  bool canRemoveGrq(String userId) => userId != ownerId;
-
-  List<Map<String, dynamic>> getAdmins() {
-    return members
-        .where((m) {
-          final role = m['role'] as String?;
-          return role == 'admin' || m['userId'] == ownerId;
-        })
-        .toList();
-  }
-
-  List<Map<String, dynamic>> getRegularMembers() {
-    return members
-        .where((m) {
-          final role = m['role'] as String?;
-          return role == 'member' && m['userId'] != ownerId;
-        })
-        .toList();
-  }
+  int get membersCount => memberCount;
 }

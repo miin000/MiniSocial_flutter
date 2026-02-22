@@ -1,243 +1,436 @@
-// lib/screens/group/group_detail_screen.dart
-
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/group_provider.dart';
 import '../../models/group_model.dart';
-import '../../components/role_badge.dart';
-import 'group_posts_screen.dart';
-import 'group_members_screen.dart';
-import 'group_info_screen.dart';
+import '../../models/group_post_model.dart';
+import 'package:provider/provider.dart';
+import '../../providers/group_provider.dart';
 import 'group_settings_screen.dart';
+import 'create_post_in_group_screen.dart';
 
 class GroupDetailScreen extends StatefulWidget {
-  final String groupId;
-  const GroupDetailScreen({super.key, required this.groupId});
+  final GroupModel group;
+  final String currentUserId;
+
+  const GroupDetailScreen({
+    Key? key,
+    required this.group,
+    required this.currentUserId,
+  }) : super(key: key);
 
   @override
   State<GroupDetailScreen> createState() => _GroupDetailScreenState();
 }
 
-class _GroupDetailScreenState extends State<GroupDetailScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  bool _hasFetched = false;
+class _GroupDetailScreenState extends State<GroupDetailScreen> {
+  late GroupModel group;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_hasFetched) {
-        _hasFetched = true;
-        final groupProvider = Provider.of<GroupProvider>(context, listen: false);
-        groupProvider.fetchGroupDetail(widget.groupId);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+    group = widget.group;
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final groupProvider = Provider.of<GroupProvider>(context);
-    final userId = authProvider.user?.id ?? '';
-    final group = groupProvider.currentGroup;
+    final isOwner = group.ownerId != null &&
+        widget.currentUserId.isNotEmpty &&
+        group.ownerId.toString() == widget.currentUserId.toString();
 
-    if (group == null && !groupProvider.isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Chi tiết nhóm')),
-        body: const Center(child: Text('Không thể tải thông tin nhóm')),
-      );
-    }
+    final userRole = isOwner
+        ? MemberRole.admin
+        : group.getUserRole(widget.currentUserId);
 
-    final isOwner = group?.isOwner(userId) ?? false;
-    final isAdmin = group?.isAdmin(userId) ?? false;
-
-    return WillPopScope(
-      onWillPop: () async {
-        if (isOwner && group != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                '⚠️ Bạn là trưởng nhóm. Hãy chuyển quyền trước khi rời nhóm.',
-              ),
-            ),
-          );
-          return false;
-        }
-        return true;
-      },
+    return DefaultTabController(
+      length: 3,
       child: Scaffold(
+        backgroundColor: Colors.grey[100],
+
+        // ================= APP BAR =================
         appBar: AppBar(
-          title: Text(group?.name ?? 'Chi tiết nhóm'),
-          backgroundColor: const Color(0xFF3b82f6),
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          elevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            group.name,
+            style: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           actions: [
-            if (isOwner)
-              IconButton(
-                icon: const Icon(Icons.settings),
-                onPressed: () => Navigator.push(
+            // 🔔 Thông báo
+            IconButton(
+              icon: const Icon(Icons.notifications_none,
+                  color: Colors.black),
+              onPressed: () {},
+            ),
+
+            // ⚙ Cài đặt
+            IconButton(
+              icon: const Icon(Icons.settings, color: Colors.black),
+              onPressed: () async {
+                final updatedGroup = await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => GroupSettingsScreen(groupId: widget.groupId),
-                  ),
-                ),
-                tooltip: 'Cài đặt',
-              ),
-            if (!isOwner && group != null)
-              PopupMenuButton<String>(
-                onSelected: (value) async {
-                  if (value == 'leave') {
-                    final result =
-                        await groupProvider.leaveGroup(widget.groupId);
-                    if (result['success']) {
-                      Fluttertoast.showToast(
-                        msg: 'Rời nhóm thành công!',
-                        backgroundColor: Colors.green,
-                      );
-                      Navigator.pop(context);
-                    } else {
-                      // Xử lý lỗi 403 - trưởng nhóm không thể rời
-                      final statusCode = result['statusCode'] as int?;
-                      String errorMsg = result['message'] ?? 'Lỗi rời nhóm';
-                      
-                      if (statusCode == 403) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(errorMsg),
-                            backgroundColor: Colors.orange,
-                            duration: const Duration(seconds: 4),
-                          ),
-                        );
-                      } else {
-                        Fluttertoast.showToast(
-                          msg: errorMsg,
-                          backgroundColor: Colors.red,
-                        );
-                      }
-                    }
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'leave',
-                    child: Row(
-                      children: [
-                        Icon(Icons.exit_to_app, color: Colors.red),
-                        SizedBox(width: 8),
-                        Text('Rời nhóm', style: TextStyle(color: Colors.red)),
-                      ],
+                    builder: (_) => GroupSettingsScreen(
+                      group: group,
+                      currentUserId: widget.currentUserId,
                     ),
                   ),
-                ],
-              ),
+                );
+
+                if (updatedGroup != null && updatedGroup is GroupModel) {
+                  setState(() {
+                    group = updatedGroup;
+                  });
+                }
+              },
+            ),
           ],
-          bottom: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'Bài viết', icon: Icon(Icons.article)),
-              Tab(text: 'Thành viên', icon: Icon(Icons.people)),
-              Tab(text: 'Thông tin', icon: Icon(Icons.info)),
-            ],
-          ),
         ),
-        body: groupProvider.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
+
+        // ================= BODY =================
+        body: Column(
+          children: [
+            // -------- COVER --------
+            Container(
+              height: 180,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                image: group.coverUrl != null
+                    ? DecorationImage(
+                  image: NetworkImage(group.coverUrl!),
+                  fit: BoxFit.cover,
+                )
+                    : null,
+                color: Colors.grey[300],
+              ),
+            ),
+
+            // -------- GROUP INFO --------
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              color: Colors.white,
+              child: Column(
                 children: [
-                  // Header Info
-                  if (group != null)
-                    Container(
-                      color: Colors.grey[50],
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 40,
-                            backgroundColor: Colors.blue.shade200,
-                            backgroundImage: group.avatar != null
-                                ? NetworkImage(group.avatar!)
-                                : null,
-                            child: group.avatar == null
-                                ? Text(
-                                    group.name[0].toUpperCase(),
-                                    style: const TextStyle(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  group.name,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${group.memberCount} thành viên',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                                if (isOwner) ...[
-                                  const SizedBox(height: 8),
-                                  RoleBadge(role: MemberRole.owner),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundImage: group.avatar != null
+                        ? NetworkImage(group.avatar!)
+                        : null,
+                    child: group.avatar == null
+                        ? const Icon(Icons.group, size: 40)
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+
+                  Text(
+                    group.name,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  Text(
+                    "${group.membersCount} thành viên",
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      "${userRole.icon} ${userRole.displayName}",
+                      style: const TextStyle(
+                        color: Colors.blue,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  Expanded(
-                    child: TabBarView(
-                      controller: _tabController,
-                      children: [
-                        GroupPostsScreen(groupId: widget.groupId),
-                        GroupMembersScreen(
-                          groupId: widget.groupId,
-                          isCurrentUserOwner: isOwner,
-                        ),
-                        if (group != null)
-                          GroupInfoScreen(group: group)
-                        else
-                          const Center(child: CircularProgressIndicator()),
-                      ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  if (group.description.isNotEmpty)
+                    Text(
+                      group.description,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.black87),
                     ),
+
+                  const SizedBox(height: 16),
+
+                  // ================= ACTION BUTTONS =================
+
+                  Row(
+                    children: [
+                      // 📝 ĐĂNG BÀI
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.post_add),
+                          label: const Text("Đăng bài"),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CreatePostInGroupScreen(
+                                  group: group,
+                                  currentUserId: widget.currentUserId,
+                                ),
+                              ),
+                            ).then((value) {
+                              if (value == true) {
+                                setState(() {});
+                              }
+                            });
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(width: 10),
+
+                      // 🚪 RỜI NHÓM
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.exit_to_app,
+                              color: Colors.red),
+                          label: const Text(
+                            "Rời nhóm",
+                            style: TextStyle(color: Colors.red),
+                          ),
+                          onPressed: _leaveGroup,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-        floatingActionButton: isAdmin
-            ? FloatingActionButton(
-                onPressed: () {
-                  // Navigate to create post in group
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Tính năng đăng bài sắp có'),
-                    ),
-                  );
-                },
-                tooltip: 'Đăng bài',
-                child: const Icon(Icons.edit),
-              )
-            : null,
+            ),
+
+            const SizedBox(height: 8),
+
+            // -------- TABS --------
+            const TabBar(
+              labelColor: Colors.blue,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Colors.blue,
+              tabs: [
+                Tab(text: "Bài viết"),
+                Tab(text: "Thành viên"),
+                Tab(text: "Thông tin"),
+              ],
+            ),
+
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _PostsTab(group: group, currentUserId: widget.currentUserId),
+                  _MembersTab(group: group, currentUserId: widget.currentUserId),
+                  _InfoTab(group: group),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ================= LEAVE GROUP =================
+
+  void _leaveGroup() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Rời nhóm"),
+        content: const Text(
+            "Bạn có chắc chắn muốn rời nhóm này không?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Hủy"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context, true);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Bạn đã rời nhóm"),
+                ),
+              );
+            },
+            child: const Text("Rời nhóm"),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+////////////////////////////////////////////////////////////
+
+class _PostsTab extends StatelessWidget {
+  final GroupModel group;
+  final String currentUserId;
+
+  const _PostsTab({required this.group, required this.currentUserId});
+
+  @override
+  Widget build(BuildContext context) {
+    final gp = Provider.of<GroupProvider>(context);
+    final current = gp.currentGroup ?? group;
+    final posts = current.posts;
+
+    if (posts.isEmpty) {
+      return const Center(child: Text('Chưa có bài viết nào trong nhóm'));
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: posts.length,
+      separatorBuilder: (_, __) => const Divider(),
+      itemBuilder: (context, index) {
+        final p = posts[index];
+        return ListTile(
+          leading: CircleAvatar(
+            child: Text(p.authorId.isNotEmpty ? p.authorId[0].toUpperCase() : 'U'),
+          ),
+          title: Text(p.content.isNotEmpty ? p.content : '[Hình/Media]'),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Tác giả: ${p.authorId}'),
+              Text('${p.createdAt}'),
+              Text('Trạng thái: ${p.status.name}'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MembersTab extends StatelessWidget {
+  final GroupModel group;
+  final String currentUserId;
+
+  const _MembersTab({required this.group, required this.currentUserId});
+
+  @override
+  Widget build(BuildContext context) {
+    final gp = Provider.of<GroupProvider>(context);
+    final current = gp.currentGroup ?? group;
+    final members = (gp.groupMembers.isNotEmpty) ? gp.groupMembers : current.members;
+
+    if (members.isEmpty) {
+      return const Center(child: Text('Chưa có thành viên'));
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: members.length,
+      separatorBuilder: (_, __) => const Divider(),
+      itemBuilder: (context, index) {
+        final m = members[index];
+
+        // Thử lấy thông tin user theo các format khác nhau
+        final Map? userObj = m['user'] as Map?;
+        final String memberId = m['userId']?.toString() ?? m['user_id']?.toString() ?? userObj?['_id']?.toString() ?? userObj?['id']?.toString() ?? '';
+        final String name = (userObj?['fullName'] ?? userObj?['username'] ?? userObj?['name'] ?? m['fullName'] ?? m['username'] ?? memberId).toString();
+        final String avatar = (userObj?['avatar'] ?? userObj?['avatar_url'] ?? m['avatar'] ?? m['avatar_url'] ?? '').toString();
+        final String role = (m['role'] ?? m['role_name'] ?? (memberId == current.ownerId ? 'owner' : 'member')).toString();
+
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+            child: avatar.isEmpty ? Text(name.isNotEmpty ? name[0].toUpperCase() : 'U') : null,
+          ),
+          title: Text(name),
+          subtitle: Text(role == 'owner' ? 'Trưởng nhóm' : role == 'admin' ? 'Quản trị viên' : 'Thành viên'),
+          trailing: role == 'owner' ? const Icon(Icons.verified, color: Colors.amber) : null,
+        );
+      },
+    );
+  }
+}
+
+class _InfoTab extends StatelessWidget {
+  final GroupModel group;
+
+  const _InfoTab({required this.group});
+
+  @override
+  Widget build(BuildContext context) {
+    final gp = Provider.of<GroupProvider>(context);
+    final current = gp.currentGroup ?? group;
+
+    Map<String, dynamic>? ownerMember;
+    try {
+      final found = current.members.firstWhere((m) {
+        final String uid = m['userId']?.toString() ?? m['user']?['_id']?.toString() ?? '';
+        return uid == current.ownerId;
+      });
+      if (found is Map<String, dynamic>) ownerMember = found;
+    } catch (_) {
+      ownerMember = null;
+    }
+
+    String ownerName = current.ownerId ?? 'Không có';
+    String ownerAvatar = '';
+    if (ownerMember != null) {
+      final Map? userObj = ownerMember['user'] as Map?;
+      ownerName = (userObj?['fullName'] ?? userObj?['username'] ?? ownerName).toString();
+      ownerAvatar = (userObj?['avatar'] ?? userObj?['avatar_url'] ?? '').toString();
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundImage: ownerAvatar.isNotEmpty ? NetworkImage(ownerAvatar) : null,
+                child: ownerAvatar.isEmpty ? Text(ownerName.isNotEmpty ? ownerName[0].toUpperCase() : 'U') : null,
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(ownerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('Trưởng nhóm', style: TextStyle(color: Colors.grey[700])),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text('Mô tả', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800])),
+          const SizedBox(height: 6),
+          Text(current.description.isNotEmpty ? current.description : 'Chưa có mô tả'),
+          const SizedBox(height: 16),
+          Text('Số thành viên: ${current.membersCount}'),
+          const SizedBox(height: 8),
+          if (current.createdAt != null) Text('Tạo ngày: ${current.createdAt}'),
+        ],
       ),
     );
   }

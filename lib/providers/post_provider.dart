@@ -61,14 +61,16 @@ class PostProvider with ChangeNotifier {
     required String userId,
     String? content,
     List<String>? mediaUrls,
+    String? groupId,
   }) async {
     try {
       final newPost = await _postService.createPost(
         userId: userId,
         content: content,
         mediaUrls: mediaUrls,
+        groupId: groupId,
       );
-      
+
       _posts.insert(0, newPost);
       notifyListeners();
       return true;

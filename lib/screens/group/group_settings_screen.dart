@@ -3,14 +3,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/group_provider.dart';
 import '../../models/group_model.dart';
 
 class GroupSettingsScreen extends StatefulWidget {
-  final String groupId;
+  final GroupModel group;
+  final String currentUserId;
 
-  const GroupSettingsScreen({super.key, required this.groupId});
+  const GroupSettingsScreen({
+    super.key,
+    required this.group,
+    required this.currentUserId,
+  });
 
   @override
   State<GroupSettingsScreen> createState() => _GroupSettingsScreenState();
@@ -24,9 +28,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final group = Provider.of<GroupProvider>(context, listen: false).currentGroup;
-    _nameController = TextEditingController(text: group?.name ?? '');
-    _descController = TextEditingController(text: group?.description ?? '');
+    _nameController =
+        TextEditingController(text: widget.group.name);
+    _descController =
+        TextEditingController(text: widget.group.description);
   }
 
   @override
@@ -38,13 +43,12 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
     final groupProvider = Provider.of<GroupProvider>(context);
-    final userId = authProvider.user?.id ?? '';
-    final group = groupProvider.currentGroup;
+    final group = widget.group;
+    final userId = widget.currentUserId;
 
-    // Kiểm soát truy cập: Chỉ trưởng nhóm
-    if (group == null || !group.isOwner(userId)) {
+    // ✅ Kiểm tra quyền
+    if (!group.isOwner(userId)) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Cài đặt nhóm'),
@@ -55,11 +59,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.lock,
-                size: 64,
-                color: Colors.grey,
-              ),
+              const Icon(Icons.lock, size: 64, color: Colors.grey),
               const SizedBox(height: 16),
               const Text(
                 'Bạn không có quyền truy cập',
@@ -89,7 +89,6 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       ),
       body: ListView(
         children: [
-          // Thông tin nhóm
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -103,6 +102,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                /// ================= VIEW MODE =================
                 if (!_isEditing) ...[
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -150,7 +151,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                       ],
                     ),
                   ),
-                ] else ...[
+                ]
+
+                /// ================= EDIT MODE =================
+                else ...[
                   TextField(
                     controller: _nameController,
                     decoration: const InputDecoration(
@@ -168,7 +172,9 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                     maxLines: 3,
                   ),
                 ],
+
                 const SizedBox(height: 16),
+
                 if (!_isEditing)
                   ElevatedButton.icon(
                     onPressed: () => setState(() => _isEditing = true),
@@ -180,7 +186,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () => setState(() => _isEditing = false),
+                          onPressed: () =>
+                              setState(() => _isEditing = false),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.grey,
                           ),
@@ -190,8 +197,49 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () =>
-                              _updateGroupInfo(context, groupProvider),
+                          onPressed: () async {
+                            final name =
+                            _nameController.text.trim();
+                            final desc =
+                            _descController.text.trim();
+
+                            if (name.isEmpty) {
+                              Fluttertoast.showToast(
+                                msg: 'Tên nhóm không thể trống',
+                                backgroundColor: Colors.red,
+                              );
+                              return;
+                            }
+
+                            final result =
+                            await groupProvider.updateGroupInfo(
+                              group.id,
+                              name,
+                              desc,
+                              group.avatar,
+                            );
+
+                            if (result['success']) {
+                              Fluttertoast.showToast(
+                              msg: 'Cập nhật thành công!',
+                              backgroundColor: Colors.green,
+                              );
+
+                              // ✅ Tạo group mới với dữ liệu đã sửa
+                              final updatedGroup = widget.group.copyWith(
+                              name: name,
+                              description: desc,
+                              );
+
+                              Navigator.pop(context, updatedGroup); // ✅ trả dữ liệu về
+                            } else {
+                              Fluttertoast.showToast(
+                                msg: result['message'] ??
+                                    'Lỗi cập nhật',
+                                backgroundColor: Colors.red,
+                              );
+                            }
+                          },
                           child: const Text('Lưu'),
                         ),
                       ),
@@ -199,147 +247,6 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
                   ),
               ],
             ),
-          ),
-          const Divider(),
-
-          // Các tùy chọn quản lý
-          ListTile(
-            leading: const Icon(Icons.people, color: Colors.blue),
-            title: const Text('Quản lý thành viên'),
-            subtitle: const Text('Thêm, xóa hoặc cấp quyền'),
-            onTap: () => Navigator.pop(context),
-          ),
-          const Divider(),
-
-          // Xóa group
-          ListTile(
-            leading: const Icon(Icons.delete, color: Colors.red),
-            title: const Text(
-              'Xóa nhóm',
-              style: TextStyle(color: Colors.red),
-            ),
-            subtitle: const Text('Hành động không thể hoàn tác'),
-            onTap: () => _showDeleteConfirmation(context, groupProvider),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _updateGroupInfo(
-    BuildContext context,
-    GroupProvider groupProvider,
-  ) async {
-    final name = _nameController.text.trim();
-    final desc = _descController.text.trim();
-
-    if (name.isEmpty) {
-      Fluttertoast.showToast(
-        msg: 'Tên nhóm không thể trống',
-        backgroundColor: Colors.red,
-      );
-      return;
-    }
-
-    final result = await groupProvider.updateGroupInfo(
-      widget.groupId,
-      name,
-      desc,
-      groupProvider.currentGroup?.avatar,
-    );
-
-    if (result['success']) {
-      Fluttertoast.showToast(
-        msg: 'Cập nhật thành công!',
-        backgroundColor: Colors.green,
-      );
-      setState(() => _isEditing = false);
-    } else {
-      final statusCode = result['statusCode'] as int?;
-      String errorMsg = result['message'] ?? 'Lỗi cập nhật';
-      
-      if (statusCode == 403) {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('⚠️ Không có quyền'),
-            content: Text(errorMsg),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      } else {
-        Fluttertoast.showToast(
-          msg: errorMsg,
-          backgroundColor: Colors.red,
-        );
-      }
-    }
-  }
-
-  void _showDeleteConfirmation(
-    BuildContext context,
-    GroupProvider groupProvider,
-  ) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Xóa nhóm?'),
-        content: const Text(
-          'Bạn sắp xóa nhóm này.\n\nTất cả dữ liệu sẽ bị mất và hành động này không thể hoàn tác.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final result = await groupProvider.deleteGroup(widget.groupId);
-              if (result['success']) {
-                Fluttertoast.showToast(
-                  msg: 'Xóa nhóm thành công',
-                  backgroundColor: Colors.red,
-                );
-                Navigator.popUntil(
-                  context,
-                  (route) => route.isFirst,
-                );
-              } else {
-                final statusCode = result['statusCode'] as int?;
-                String errorMsg = result['message'] ?? 'Lỗi xóa nhóm';
-                
-                if (statusCode == 403) {
-                  showDialog(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: const Text('⚠️ Không có quyền'),
-                      content: Text(errorMsg),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('OK'),
-                        ),
-                      ],
-                    ),
-                  );
-                } else {
-                  Fluttertoast.showToast(
-                    msg: errorMsg,
-                    backgroundColor: Colors.red,
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text('Xóa'),
           ),
         ],
       ),

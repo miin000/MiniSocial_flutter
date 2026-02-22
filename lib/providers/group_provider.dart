@@ -60,14 +60,50 @@ class GroupProvider with ChangeNotifier {
     print('✅ GroupProvider: Hoàn thành fetchGroups()');
   }
 
-  Future<Map<String, dynamic>> createGroup(String name, String description, String? avatar) async {
+  Future<Map<String, dynamic>> createGroup(String name, String description, String? avatar, {String? ownerId}) async {
     _isLoading = true;
     notifyListeners();
+    final result = await _groupService.createGroup(name, description, avatar, ownerId: ownerId);
 
-    final result = await _groupService.createGroup(name, description, avatar);
+    // Nếu backend không gán owner, đảm bảo locally creator được gán là trưởng nhóm
+    if (result['success'] == true) {
+      try {
+        final groupData = result['group'];
+        GroupModel? created;
 
-    // Không cần fetch ở đây nữa vì screen sẽ tự fetch sau khi tạo thành công
-    
+        if (groupData is GroupModel) {
+          created = groupData;
+        } else if (groupData is Map<String, dynamic>) {
+          created = GroupModel.fromJson(groupData);
+        }
+
+        if (created != null) {
+          // Nếu ownerId missing, set to provided ownerId
+          if ((created.ownerId == null || created.ownerId!.isEmpty) && ownerId != null) {
+            final fixed = GroupModel(
+              id: created.id,
+              name: created.name,
+              description: created.description,
+              avatar: created.avatar,
+              ownerId: ownerId,
+              members: created.members,
+              memberCount: created.memberCount,
+              isJoined: true,
+              createdAt: created.createdAt,
+              updatedAt: created.updatedAt,
+              posts: created.posts,
+            );
+
+            _myGroups.insert(0, fixed);
+          } else {
+            _myGroups.insert(0, created);
+          }
+        }
+      } catch (e) {
+        print('⚠️ GroupProvider: Warning when processing created group: $e');
+      }
+    }
+
     _isLoading = false;
     notifyListeners();
     return result;

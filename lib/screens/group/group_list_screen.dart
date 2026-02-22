@@ -26,9 +26,11 @@ class _GroupListScreenState extends State<GroupListScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_hasFetched) {
         _hasFetched = true;
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        final groupProvider = Provider.of<GroupProvider>(context, listen: false);
-        // ✅ Truyền authProvider để kiểm tra xác thực
+        final authProvider =
+        Provider.of<AuthProvider>(context, listen: false);
+        final groupProvider =
+        Provider.of<GroupProvider>(context, listen: false);
+
         groupProvider.fetchGroups(authProvider: authProvider);
       }
     });
@@ -41,96 +43,177 @@ class _GroupListScreenState extends State<GroupListScreen> {
     final userId = authProvider.user?.id ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Group'), actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})]),
+      appBar: AppBar(
+        title: const Text('Group'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {},
+          )
+        ],
+      ),
       body: groupProvider.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : (groupProvider.errorMessage != null
-          ? Center(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 64, color: Colors.grey),
-                      const SizedBox(height: 16),
-                      Text(
-                        groupProvider.errorMessage!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 16, color: Colors.black87),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          Provider.of<GroupProvider>(context, listen: false)
-                              .fetchGroups(authProvider: authProvider);
-                        },
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Thử lại'),
-                      ),
-                    ],
+          : groupProvider.errorMessage != null
+          ? _buildError(groupProvider, authProvider)
+          : RefreshIndicator(
+        onRefresh: () =>
+            groupProvider.fetchGroups(authProvider: authProvider),
+        child: ListView(
+          children: [
+
+            // ================= MY GROUPS =================
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Group của bạn',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+              ),
+            ),
+
+            if (groupProvider.myGroups.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text('Bạn chưa tham gia group nào'),
+              ),
+
+            ...groupProvider.myGroups.map(
+                  (group) => GroupItem(
+                group: group,
+                isOwner: group.getUserRole(userId) ==
+                    MemberRole.owner,
+
+                // ✅ FIX Ở ĐÂY
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => GroupDetailScreen(
+                      group: group,
+                      currentUserId: userId,
+                    ),
                   ),
                 ),
               ),
-            )
-          : RefreshIndicator(
-        onRefresh: () => groupProvider.fetchGroups(authProvider: authProvider),
-        child: ListView(
-          children: [
-            if (groupProvider.myGroups.isEmpty && groupProvider.suggestedGroups.isEmpty)
-              const Center(child: Text('Chưa có group nào. Tạo ngay!')),
-            const Padding(padding: EdgeInsets.all(16), child: Text('Group của bạn', style: TextStyle(fontWeight: FontWeight.bold))),
-            ...groupProvider.myGroups.map((group) => GroupItem(
-              group: group,
-              isOwner: group.getUserRole(userId) == MemberRole.owner,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GroupDetailScreen(groupId: group.id))),
-            )),
-            const Padding(padding: EdgeInsets.all(16), child: Text('Gợi ý group', style: TextStyle(fontWeight: FontWeight.bold))),
-            ...groupProvider.suggestedGroups.map((group) => GroupItem(
-              group: group,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GroupDetailScreen(groupId: group.id))),
-              onJoin: () async {
-                final result = await groupProvider.joinGroup(group.id);
-                if (result['success']) {
-                  Fluttertoast.showToast(
-                    msg: 'Tham gia thành công! 🎉',
-                    backgroundColor: Colors.green,
-                  );
-                  await groupProvider.fetchGroups(authProvider: authProvider);
-                } else {
-                  final statusCode = result['statusCode'] as int?;
-                  String errorMsg = result['message'] ?? 'Lỗi tham gia';
-                  
-                  if (statusCode == 403) {
-                    // Dialog for permission denied
-                    showDialog(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: const Text('⚠️ Không thể tham gia'),
-                        content: Text(errorMsg),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('OK'),
-                          ),
-                        ],
-                      ),
-                    );
-                  } else {
+            ),
+
+            // ================= SUGGESTED =================
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Gợi ý group',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+              ),
+            ),
+
+            ...groupProvider.suggestedGroups.map(
+                  (group) => GroupItem(
+                group: group,
+
+                // ✅ FIX Ở ĐÂY
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => GroupDetailScreen(
+                      group: group,
+                      currentUserId: userId,
+                    ),
+                  ),
+                ),
+
+                onJoin: () async {
+                  final result =
+                  await groupProvider.joinGroup(group.id);
+
+                  if (result['success']) {
                     Fluttertoast.showToast(
-                      msg: errorMsg,
-                      backgroundColor: Colors.red,
+                      msg: 'Tham gia thành công! 🎉',
+                      backgroundColor: Colors.green,
                     );
+
+                    await groupProvider.fetchGroups(
+                        authProvider: authProvider);
+                  } else {
+                    final statusCode =
+                    result['statusCode'] as int?;
+                    String errorMsg =
+                        result['message'] ?? 'Lỗi tham gia';
+
+                    if (statusCode == 403) {
+                      showDialog(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: const Text(
+                              '⚠️ Không thể tham gia'),
+                          content: Text(errorMsg),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.pop(context),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    } else {
+                      Fluttertoast.showToast(
+                        msg: errorMsg,
+                        backgroundColor: Colors.red,
+                      );
+                    }
                   }
-                }
-              },
-            )),
+                },
+              ),
+            ),
           ],
         ),
-      )),
+      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateGroupScreen())),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const CreateGroupScreen(),
+          ),
+        ),
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildError(
+      GroupProvider groupProvider, AuthProvider authProvider) {
+    return Center(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline,
+                  size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(
+                groupProvider.errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 16, color: Colors.black87),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Provider.of<GroupProvider>(context,
+                      listen: false)
+                      .fetchGroups(authProvider: authProvider);
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Thử lại'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

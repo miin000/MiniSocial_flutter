@@ -21,8 +21,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
- _loadPosts();
-    _scrollController.addListener(_onScroll);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPosts();
+    });
+  _scrollController.addListener(_onScroll);
   }
 
   @override

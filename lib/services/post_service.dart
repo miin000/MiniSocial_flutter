@@ -67,12 +67,14 @@ class PostService {
     required String userId,
     String? content,
     List<String>? mediaUrls,
+    String? groupId,
   }) async {
     try {
       final response = await _dio.post(
         '$baseUrl/posts',
         data: {
           'user_id': userId,
+          if (groupId != null) 'group_id': groupId,
           if (content != null) 'content': content,
           if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_urls': mediaUrls,
           'content_type': mediaUrls != null && mediaUrls.isNotEmpty ? 'image' : 'text',

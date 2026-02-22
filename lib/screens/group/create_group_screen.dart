@@ -58,16 +58,15 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         _nameController.text.trim(),
         _descController.text.trim(),
         _avatar,
+        ownerId: authProvider.user?.id,
       );
 
       if (!mounted) return;
 
       if (result['success']) {
-        // Force refresh danh sách nhóm sau khi tạo thành công
-        await groupProvider.fetchGroups(authProvider: authProvider);
-        
+        // Đã thêm nhóm vào state cục bộ (đảm bảo creator là owner).
+        // Không gọi fetchGroups ngay để tránh ghi đè owner nếu backend chưa set.
         if (!mounted) return;
-        
         Fluttertoast.showToast(
           msg: 'Tạo nhóm thành công! 🎉',
           backgroundColor: Colors.green,

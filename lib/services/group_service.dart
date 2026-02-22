@@ -7,13 +7,14 @@ import '../models/group_model.dart';
 class GroupService {
   final ApiService _apiService = ApiService();
 
-  Future<Map<String, dynamic>> createGroup(String name, String description, String? avatar) async {
+  Future<Map<String, dynamic>> createGroup(String name, String description, String? avatar, {String? ownerId}) async {
     try {
       print('🔍 GroupService: Creating group - name: $name');
       final data = {
         'name': name,
         'description': description,
         'avatar_url': avatar,
+        if (ownerId != null) 'owner_id': ownerId,
       };
       final response = await _apiService.post('/groups', data: data);
       print('✅ GroupService: Group created successfully');
