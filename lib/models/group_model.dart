@@ -49,6 +49,7 @@ class GroupModel {
   final String name;
   final String description;
   final String? avatar;
+  final String? coverUrl;
   final String? ownerId;
   final List<Map<String, dynamic>> members;
   final int memberCount;
@@ -62,6 +63,7 @@ class GroupModel {
     required this.name,
     this.description = '',
     this.avatar,
+    this.coverUrl,
     this.ownerId,
     this.members = const [],
     required this.memberCount,
@@ -105,6 +107,9 @@ class GroupModel {
       description: json['description']?.toString() ?? '',
       avatar: json['avatar_url']?.toString() ??
           json['avatar']?.toString(),
+      coverUrl: json['cover_url']?.toString() ??
+          json['coverUrl']?.toString() ??
+          json['background_url']?.toString(),
       ownerId: parsedOwnerId,
       members: membersJson
           .map((m) => m as Map<String, dynamic>)
@@ -136,22 +141,31 @@ class GroupModel {
   }
 
   GroupModel copyWith({
+    String? id,
     String? name,
     String? description,
     String? avatar,
+    String? coverUrl,
+    String? ownerId,
+    List<Map<String, dynamic>>? members,
+    int? memberCount,
+    bool? isJoined,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     List<GroupPostModel>? posts,
   }) {
     return GroupModel(
-      id: id,
+      id: id ?? this.id,
       name: name ?? this.name,
       description: description ?? this.description,
       avatar: avatar ?? this.avatar,
-      ownerId: ownerId,
-      members: members,
-      memberCount: memberCount,
-      isJoined: isJoined,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
+      coverUrl: coverUrl ?? this.coverUrl,
+      ownerId: ownerId ?? this.ownerId,
+      members: members ?? this.members,
+      memberCount: memberCount ?? this.memberCount,
+      isJoined: isJoined ?? this.isJoined,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       posts: posts ?? this.posts,
     );
   }
@@ -189,7 +203,7 @@ class GroupModel {
   bool isAdminUser(String userId) =>
       getUserRole(userId).isAdmin;
 
-  String? get coverUrl => avatar;
+  String? get cover => coverUrl ?? avatar;
 
   int get membersCount => memberCount;
 }

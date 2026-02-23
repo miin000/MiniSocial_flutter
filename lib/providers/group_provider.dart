@@ -2,17 +2,26 @@
 
 import 'package:flutter/material.dart';
 import '../models/group_model.dart';
+import '../models/post_model.dart';
 import '../services/group_service.dart';
+import '../services/post_service.dart';
+import '../services/api_service.dart';
 import 'auth_provider.dart';
 
 class GroupProvider with ChangeNotifier {
   final GroupService _groupService = GroupService();
+  final PostService _postService = PostService(ApiService().dio);
+
   List<GroupModel> _myGroups = [];
   List<GroupModel> _suggestedGroups = [];
   GroupModel? _currentGroup;
   List<Map<String, dynamic>> _groupMembers = [];
-  String? _currentUserRole; // 'ADMIN', 'MODERATOR', 'MEMBER' from backend
+  String? _currentUserRole;
+
+  final Map<String, List<Post>> _groupPosts = {};
+
   bool _isLoading = false;
+  bool _isLoadingPosts = false;
   String? _errorMessage;
 
   List<GroupModel> get myGroups => _myGroups;
@@ -21,34 +30,31 @@ class GroupProvider with ChangeNotifier {
   List<Map<String, dynamic>> get groupMembers => _groupMembers;
   String? get currentUserRole => _currentUserRole;
   bool get isLoading => _isLoading;
+  bool get isLoadingPosts => _isLoadingPosts;
   String? get errorMessage => _errorMessage;
 
-  /// Returns true if the current user is the group admin/owner
   bool get isCurrentUserAdmin =>
       _currentUserRole != null &&
-      _currentUserRole!.toUpperCase() == 'ADMIN';
+          _currentUserRole!.toUpperCase() == 'ADMIN';
 
-  Future<void> fetchGroups({AuthProvider? authProvider, bool isRetry = false}) async {
-    if (_isLoading && !isRetry) {
-      print('📌 GroupProvider: Đang loading, bỏ qua request...');
-      return;
-    }
+  List<Post> getGroupPosts(String groupId) => _groupPosts[groupId] ?? [];
 
-    // ✅ Kiểm tra xem user đã xác thực chưa
+  Future<void> fetchGroups({
+    AuthProvider? authProvider,
+    bool isRetry = false,
+  }) async {
+    if (_isLoading && !isRetry) return;
+
     if (authProvider != null && !authProvider.isAuthenticated) {
-      print('🔴 GroupProvider: User chưa xác thực');
       _errorMessage = '🔐 Vui lòng đăng nhập để xem danh sách nhóm';
       _isLoading = false;
       notifyListeners();
       return;
     }
 
-    if (!isRetry) {
-      _isLoading = true;
-      _errorMessage = null;
-      notifyListeners();
-      print('🟢 GroupProvider: Bắt đầu fetchGroups()...');
-    }
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
 
     final result = await _groupService.getGroups();
 
@@ -56,58 +62,45 @@ class GroupProvider with ChangeNotifier {
       _myGroups = result['myGroups'] as List<GroupModel>? ?? [];
       _suggestedGroups = result['suggestedGroups'] as List<GroupModel>? ?? [];
       _errorMessage = null;
-      print('✅ GroupProvider: Đã tải ${_myGroups.length} groups của tôi + ${_suggestedGroups.length} suggested groups');
     } else {
       _errorMessage = result['message'] ?? 'Không thể tải danh sách nhóm';
-      print('🔴 GroupProvider: ${_errorMessage}');
     }
 
     _isLoading = false;
     notifyListeners();
-    print('✅ GroupProvider: Hoàn thành fetchGroups()');
   }
 
-  Future<Map<String, dynamic>> createGroup(String name, String description, String? avatar, {String? ownerId}) async {
+  Future<Map<String, dynamic>> createGroup(
+      String name,
+      String description,
+      String? avatar, {
+        String? ownerId,
+      }) async {
     _isLoading = true;
     notifyListeners();
-    final result = await _groupService.createGroup(name, description, avatar, ownerId: ownerId);
 
-    // Nếu backend không gán owner, đảm bảo locally creator được gán là trưởng nhóm
+    final result = await _groupService.createGroup(
+      name,
+      description,
+      avatar,
+      ownerId: ownerId,
+    );
+
     if (result['success'] == true) {
-      try {
-        final groupData = result['group'];
-        GroupModel? created;
+      GroupModel? created;
+      final groupData = result['group'];
 
-        if (groupData is GroupModel) {
-          created = groupData;
-        } else if (groupData is Map<String, dynamic>) {
-          created = GroupModel.fromJson(groupData);
+      if (groupData is GroupModel) {
+        created = groupData;
+      } else if (groupData is Map<String, dynamic>) {
+        created = GroupModel.fromJson(groupData);
+      }
+
+      if (created != null) {
+        if ((created.ownerId == null || created.ownerId!.isEmpty) && ownerId != null) {
+          created = created.copyWith(ownerId: ownerId);
         }
-
-        if (created != null) {
-          // Nếu ownerId missing, set to provided ownerId
-          if ((created.ownerId == null || created.ownerId!.isEmpty) && ownerId != null) {
-            final fixed = GroupModel(
-              id: created.id,
-              name: created.name,
-              description: created.description,
-              avatar: created.avatar,
-              ownerId: ownerId,
-              members: created.members,
-              memberCount: created.memberCount,
-              isJoined: true,
-              createdAt: created.createdAt,
-              updatedAt: created.updatedAt,
-              posts: created.posts,
-            );
-
-            _myGroups.insert(0, fixed);
-          } else {
-            _myGroups.insert(0, created);
-          }
-        }
-      } catch (e) {
-        print('⚠️ GroupProvider: Warning when processing created group: $e');
+        _myGroups.insert(0, created);
       }
     }
 
@@ -116,68 +109,305 @@ class GroupProvider with ChangeNotifier {
     return result;
   }
 
-  // Các hàm khác: joinGroup, leaveGroup, addMember, removeMember, transferOwnership, etc.
-  Future<Map<String, dynamic>> joinGroup(String groupId) async {
-    final result = await _groupService.joinGroup(groupId);
-    if (result['success']) await fetchGroups();
-    return result;
-  }
-
-  Future<Map<String, dynamic>> leaveGroup(String groupId) async {
-    final result = await _groupService.leaveGroup(groupId);
-    if (result['success']) await fetchGroups();
-    return result;
-  }
-
-  Future<Map<String, dynamic>> addMember(String groupId, String userId) async {
-    final result = await _groupService.addMember(groupId, userId);
-    return result;
-  }
-
-  Future<Map<String, dynamic>> removeMember(String groupId, String userId) async {
-    final result = await _groupService.removeMember(groupId, userId);
-    return result;
-  }
-
-  Future<Map<String, dynamic>> transferOwnership(String groupId, String newOwnerId) async {
-    final result = await _groupService.transferOwnership(groupId, newOwnerId);
-    if (result['success']) await fetchGroups();
-    return result;
-  }
-
-  Future<Map<String, dynamic>> fetchGroupDetail(String groupId) async {
+  Future<void> fetchGroupDetail(String groupId) async {
     _isLoading = true;
     notifyListeners();
 
     final result = await _groupService.getGroupDetail(groupId);
 
     if (result['success']) {
-      _currentGroup = result['group'] as GroupModel;
-      // Safely convert List<dynamic> → List<Map<String, dynamic>>
-      final rawMembers = result['members'];
+      _currentGroup = result['group'] as GroupModel?;
+      final rawMembers = result['members'] ?? [];
       _groupMembers = rawMembers is List
-          ? rawMembers
-              .map((m) => Map<String, dynamic>.from(m as Map))
-              .toList()
-          : <Map<String, dynamic>>[];
-      print('✅ GroupProvider fetchGroupDetail: ${_groupMembers.length} members loaded');
+          ? rawMembers.map((m) => Map<String, dynamic>.from(m as Map)).toList()
+          : [];
+
       _currentUserRole = result['userRole'] as String?;
+
+      if (result['posts'] != null && result['posts'] is List) {
+        final posts = (result['posts'] as List)
+            .map((p) => Post.fromJson(p as Map<String, dynamic>))
+            .toList();
+        _groupPosts[groupId] = posts;
+      } else if (_currentGroup != null && _currentGroup!.posts.isNotEmpty) {
+        final gp = _currentGroup!;
+        final posts = gp.posts.map((gpost) {
+          return Post(
+            id: gpost.id,
+            userId: gpost.authorId,
+            content: gpost.content,
+            createdAt: gpost.createdAt,
+            likesCount: 0,
+            commentsCount: 0,
+            sharesCount: 0,
+            mediaUrls: null,
+            contentType: null,
+            userName: null,
+            userAvatar: null,
+          );
+        }).toList();
+        _groupPosts[groupId] = posts;
+      }
+
       _errorMessage = null;
     } else {
-      _errorMessage = result['message'] ?? 'Không thể tải chi tiết group';
+      _errorMessage = result['message'] ?? 'Không thể tải chi tiết nhóm';
     }
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> fetchGroupPosts(String groupId, {bool refresh = false}) async {
+    _isLoadingPosts = true;
+    notifyListeners();
+
+    try {
+      final raw = await _groupService.getGroupPosts(groupId);
+      final newPostsFromServer = raw.map((p) => Post.fromJson(p as Map<String, dynamic>)).toList();
+      final existingPosts = _groupPosts[groupId] ?? <Post>[];
+      final existingMap = {for (var p in existingPosts) p.id!: p};
+      final mergedPosts = newPostsFromServer.map((serverPost) {
+        final existing = existingMap[serverPost.id];
+        if (existing != null) {
+          return serverPost.copyWith(
+            isLiked: existing.isLiked,
+            likesCount: existing.likesCount,
+            commentsCount: existing.commentsCount,
+          );
+        }
+        return serverPost;
+      }).toList();
+
+      if (refresh || !_groupPosts.containsKey(groupId)) {
+        _groupPosts[groupId] = mergedPosts;
+      } else {
+        _groupPosts[groupId] = mergedPosts;
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Lỗi fetch group posts: $e');
+      _errorMessage = 'Không thể tải bài viết nhóm: $e';
+      notifyListeners();
+    } finally {
+      _isLoadingPosts = false;
+      notifyListeners();
+    }
+  }
+
+  void addPostToGroup(String groupId, Post newPost) {
+    _groupPosts.putIfAbsent(groupId, () => []);
+    _groupPosts[groupId]!.insert(0, newPost);
+    notifyListeners();
+  }
+
+  Future<void> toggleLikeOnGroupPost(String postId, String userId) async {
+    try {
+      final entry = _groupPosts.entries.firstWhere(
+        (e) => e.value.any((p) => p.id == postId),
+        orElse: () => MapEntry('', <Post>[]),
+      );
+      if (entry.key == '') return;
+
+      final posts = entry.value!;
+      final idx = posts.indexWhere((p) => p.id == postId);
+      if (idx == -1) return;
+
+      final post = posts[idx];
+      final isLiked = post.isLiked ?? false;
+
+      final oldPost = post;
+      posts[idx] = post.copyWith(
+        isLiked: !isLiked,
+        likesCount: isLiked ? post.likesCount - 1 : post.likesCount + 1,
+      );
+      notifyListeners();
+
+      try {
+        await _postService.toggleLike(userId: userId, postId: postId);
+      } catch (e) {
+        posts[idx] = oldPost;
+        _errorMessage = e.toString();
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  void incrementCommentsOnGroupPost(String postId, int delta) {
+    final entry = _groupPosts.entries.firstWhere(
+      (e) => e.value.any((p) => p.id == postId),
+      orElse: () => MapEntry('', <Post>[]),
+    );
+    if (entry.key == '') return;
+
+    final posts = entry.value!;
+    final idx = posts.indexWhere((p) => p.id == postId);
+    if (idx == -1) return;
+
+    final post = posts[idx];
+    posts[idx] = post.copyWith(commentsCount: post.commentsCount + delta);
+    notifyListeners();
+  }
+
+  Future<Post?> createGroupPost(
+      String groupId, {
+        required String content,
+        List<String>? mediaUrls,
+        String? contentType,
+      }) async {
+    try {
+      final result = await _groupService.createGroupPost(
+        groupId,
+        content: content,
+        mediaUrls: mediaUrls,
+        contentType: contentType,
+      );
+      if (result == null) return null;
+
+      final postJson = Map<String, dynamic>.from(result);
+      postJson['group_id'] = groupId;
+
+      final authProvider = AuthProvider();
+      final currentUser = authProvider.user;
+
+      if (currentUser != null) {
+        postJson['user_name'] = currentUser.fullName ?? currentUser.username ?? 'Bạn';
+        postJson['username'] = currentUser.username ?? '';
+        postJson['user_avatar'] = currentUser.avatar;
+        postJson['user_id'] = currentUser.id;
+      }
+
+      final post = Post.fromJson(postJson);
+
+      addPostToGroup(groupId, post);
+      return post;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> joinGroup(String groupId, {String? currentUserId}) async {
+    final result = await _groupService.joinGroup(groupId);
+    
+    if (result['success']) {
+      final uid = currentUserId ?? '';
+      
+      // 1. Thêm user vào danh sách thành viên ngay lập tức
+      if (uid.isNotEmpty) {
+        _groupMembers.add({
+          'userId': uid,
+          'user_id': uid,
+          'id': uid,
+          'role': 'MEMBER',
+          'status': 'ACTIVE',
+          'joined_at': DateTime.now().toIso8601String(),
+        });
+      }
+      
+      // 2. Cập nhật memberCount
+      if (_currentGroup != null) {
+        final newCount = _currentGroup!.memberCount + 1;
+        _currentGroup = _currentGroup!.copyWith(memberCount: newCount);
+      }
+      
+      // 3. Cập nhật role hiện tại
+      _currentUserRole = 'MEMBER';
+      
+      // 4. Chuyển nhóm từ suggestedGroups sang myGroups
+      final groupIndex = _suggestedGroups.indexWhere((g) => g.id == groupId);
+      if (groupIndex != -1) {
+        final groupToAdd = _suggestedGroups.removeAt(groupIndex);
+        final updatedGroup = groupToAdd.copyWith(
+          memberCount: groupToAdd.memberCount + 1,
+          isJoined: true,
+        );
+        _myGroups.insert(0, updatedGroup);
+      }
+      
+      notifyListeners();
+    }
+    
     return result;
   }
 
-  Future<Map<String, dynamic>> updateGroupMemberRole(String groupId, String userId, String role) async {
-    final result = await _groupService.updateMemberRole(groupId, userId, role);
+  Future<Map<String, dynamic>> leaveGroup(String groupId, {String? currentUserId}) async {
+    final result = await _groupService.leaveGroup(groupId);
+
     if (result['success']) {
-      // Update local state if needed
-      await fetchGroupDetail(groupId);
+      final uid = currentUserId ?? '';
+
+      _groupMembers.removeWhere((m) {
+        final id = (m['userId'] ?? m['user_id'])?.toString() ?? '';
+        return uid.isNotEmpty ? id == uid : false;
+      });
+
+      if (_currentGroup != null) {
+        final newCount = (_currentGroup!.memberCount - 1).clamp(0, 999999).toInt();
+        _currentGroup = _currentGroup!.copyWith(memberCount: newCount);
+
+        if (_currentGroup!.ownerId != null && uid.isNotEmpty && _currentGroup!.ownerId == uid) {
+          String? newOwnerId;
+          try {
+            final candidate = _groupMembers.firstWhere((m) {
+              final role = (m['role']?.toString() ?? '').toUpperCase();
+              return role == 'MODERATOR' || role == 'ADMIN';
+            });
+            newOwnerId = (candidate['userId'] ?? candidate['user_id'])?.toString();
+            candidate['role'] = 'ADMIN';
+          } catch (_) {
+            if (_groupMembers.isNotEmpty) {
+              final candidate = _groupMembers.first;
+              newOwnerId = (candidate['userId'] ?? candidate['user_id'])?.toString();
+              candidate['role'] = 'ADMIN';
+            }
+          }
+
+          _currentGroup = _currentGroup!.copyWith(ownerId: newOwnerId);
+        }
+
+        if (_groupMembers.isEmpty) {
+          _myGroups.removeWhere((g) => g.id == groupId);
+          _suggestedGroups.removeWhere((g) => g.id == groupId);
+          _currentGroup = null;
+        }
+      }
+
+      await fetchGroups();
     }
+
+    notifyListeners();
+    return result;
+  }
+
+  Future<Map<String, dynamic>> addMember(String groupId, String userId) async {
+    final result = await _groupService.addMember(groupId, userId);
+    if (result['success']) await fetchGroupDetail(groupId);
+    return result;
+  }
+
+  Future<Map<String, dynamic>> removeMember(String groupId, String userId) async {
+    final result = await _groupService.removeMember(groupId, userId);
+    if (result['success']) await fetchGroupDetail(groupId);
+    return result;
+  }
+
+  Future<Map<String, dynamic>> transferOwnership(
+      String groupId, String newOwnerId) async {
+    final result = await _groupService.transferOwnership(groupId, newOwnerId);
+    if (result['success']) await fetchGroupDetail(groupId);
+    return result;
+  }
+
+  Future<Map<String, dynamic>> updateGroupMemberRole(
+      String groupId, String userId, String role) async {
+    final result = await _groupService.updateMemberRole(groupId, userId, role);
+    if (result['success']) await fetchGroupDetail(groupId);
     return result;
   }
 
@@ -189,12 +419,25 @@ class GroupProvider with ChangeNotifier {
 
   Future<Map<String, dynamic>> updateGroupInfo(
       String groupId, String name, String description, String? avatar) async {
-    final result = await _groupService.updateGroup(groupId, name, description, avatar);
+    final result =
+    await _groupService.updateGroup(groupId, name, description, avatar);
     if (result['success']) await fetchGroupDetail(groupId);
     return result;
   }
 
   void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  // Clear data khi logout hoặc cần reset
+  void clear() {
+    _myGroups = [];
+    _suggestedGroups = [];
+    _currentGroup = null;
+    _groupMembers = [];
+    _currentUserRole = null;
+    _groupPosts.clear();
     _errorMessage = null;
     notifyListeners();
   }

@@ -10,7 +10,7 @@ class PostService {
   PostService(this._dio);
 
   // Posts
-  Future<Map<String, dynamic>> getPosts({int page = 1, int limit = 20, String? userId}) async {
+  Future<Map<String, dynamic>> getPosts({int page = 1, int limit = 20, String? userId, String? groupId}) async {
     try {
       final response = await _dio.get(
         '$baseUrl/posts',
@@ -18,9 +18,10 @@ class PostService {
           'page': page,
           'limit': limit,
           if (userId != null) 'user_id': userId,
+          if (groupId != null) 'group_id': groupId,
         },
       );
-      
+
       final posts = (response.data['posts'] as List)
           .map((post) => Post.fromJson(post))
           .toList();

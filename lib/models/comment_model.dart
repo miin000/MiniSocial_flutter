@@ -7,9 +7,9 @@ class Comment {
   final int likesCount;
   final DateTime? createdAt;
   final DateTime? updatedAt;
-  
-  // For display purposes
+
   final String? userName;
+  final String? username;
   final String? userAvatar;
   final bool? isLiked;
   final List<Comment>? replies;
@@ -24,12 +24,14 @@ class Comment {
     this.createdAt,
     this.updatedAt,
     this.userName,
+    this.username,
     this.userAvatar,
     this.isLiked = false,
     this.replies,
   });
 
   factory Comment.fromJson(Map<String, dynamic> json) {
+
     return Comment(
       id: json['_id'] as String?,
       userId: json['user_id'] as String,
@@ -37,13 +39,17 @@ class Comment {
       parentId: json['parent_id'] as String?,
       content: json['content'] as String,
       likesCount: json['likes_count'] as int? ?? 0,
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']) 
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
           : null,
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at']) 
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
           : null,
       userName: json['user_name'] as String?,
+      username: json['username'] as String? ??
+          json['user']?['username'] as String? ??
+          json['author_username'] as String? ??
+          json['user_name'] as String?,
       userAvatar: json['user_avatar'] as String?,
       isLiked: json['is_liked'] as bool? ?? false,
       replies: json['replies'] != null
@@ -75,6 +81,7 @@ class Comment {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? userName,
+    String? username,
     String? userAvatar,
     bool? isLiked,
     List<Comment>? replies,
@@ -89,6 +96,7 @@ class Comment {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       userName: userName ?? this.userName,
+      username: username ?? this.username,
       userAvatar: userAvatar ?? this.userAvatar,
       isLiked: isLiked ?? this.isLiked,
       replies: replies ?? this.replies,

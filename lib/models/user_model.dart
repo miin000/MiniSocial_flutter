@@ -1,5 +1,3 @@
-// lib/models/user_model.dart
-
 class UserModel {
   final String id;
   final String email;
@@ -8,6 +6,11 @@ class UserModel {
   final List<String>? rolesAdmin;
   final List<String>? rolesGroup;
   final String? avatar;
+  final String? cover;
+  final String? bio;
+  final String? job;
+  final String? location;
+  final DateTime? createdAt;
 
   UserModel({
     required this.id,
@@ -17,6 +20,11 @@ class UserModel {
     this.rolesAdmin,
     this.rolesGroup,
     this.avatar,
+    this.cover,
+    this.bio,
+    this.job,
+    this.location,
+    this.createdAt,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -26,10 +34,13 @@ class UserModel {
       username: json['username'],
       fullName: json['fullName'] ?? json['full_name'],
       rolesAdmin: json['roles_admin'] != null ? List<String>.from(json['roles_admin']) : null,
-      rolesGroup: json['roles_group'] != null 
-          ? List<String>.from(json['roles_group']) 
-          : null,
+      rolesGroup: json['roles_group'] != null ? List<String>.from(json['roles_group']) : null,
       avatar: json['avatar'],
+      cover: json['cover'] ?? json['cover_url'],  // ← THÊM
+      bio: json['bio'],
+      job: json['job'],
+      location: json['location'],
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,  // ← THÊM
     );
   }
 
@@ -42,10 +53,13 @@ class UserModel {
       'roles_admin': rolesAdmin,
       'roles_group': rolesGroup,
       'avatar': avatar,
+      'cover': cover,     // ← THÊM
+      'bio': bio,
+      'job': job,
+      'location': location,
     };
   }
 
-  // Copy with method
   UserModel copyWith({
     String? id,
     String? email,
@@ -54,6 +68,11 @@ class UserModel {
     List<String>? rolesAdmin,
     List<String>? rolesGroup,
     String? avatar,
+    String? cover,
+    String? bio,
+    String? job,
+    String? location,
+    DateTime? createdAt,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -63,6 +82,11 @@ class UserModel {
       rolesAdmin: rolesAdmin ?? this.rolesAdmin,
       rolesGroup: rolesGroup ?? this.rolesGroup,
       avatar: avatar ?? this.avatar,
+      cover: cover ?? this.cover,
+      bio: bio ?? this.bio,
+      job: job ?? this.job,
+      location: location ?? this.location,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

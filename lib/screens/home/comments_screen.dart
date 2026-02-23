@@ -6,6 +6,7 @@ import '../../models/post_model.dart';
 import '../../models/comment_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
+import '../../providers/group_provider.dart';
 import '../../services/post_service.dart';
 import '../../services/api_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -106,6 +107,12 @@ class _CommentsScreenState extends State<CommentsScreen> {
           _replyToUserName = null;
         });
         _loadComments();
+
+        // If this is a group post, also update group provider local count
+        final groupProvider = Provider.of<GroupProvider>(context, listen: false);
+        if (widget.post.groupId != null) {
+          groupProvider.incrementCommentsOnGroupPost(widget.post.id!, 1);
+        }
         
         Fluttertoast.showToast(
           msg: 'Đã thêm bình luận',
@@ -289,7 +296,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            comment.userName ?? 'Người dùng',
+                            comment.username ?? comment.userName ?? 'Người dùng',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,

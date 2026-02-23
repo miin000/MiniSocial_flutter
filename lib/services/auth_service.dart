@@ -122,4 +122,15 @@ class AuthService {
     await _apiService.loadToken();
     return _apiService.hasToken;
   }
+
+  Future<Map<String, dynamic>> updateProfile(UserModel user) async {
+    try {
+      final response = await _apiService.put('/users/${user.id}', data: user.toJson());
+      return {'success': true, 'user': UserModel.fromJson(response.data)};
+    } on DioException catch (e) {
+      return {'success': false, 'message': e.response?.data['message'] ?? 'Lỗi cập nhật profile'};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
 }

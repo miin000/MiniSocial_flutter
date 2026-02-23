@@ -109,13 +109,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       }
 
       // Create post
-      final success = await postProvider.createPost(
+      final createdPost = await postProvider.createPost(
         userId: userId,
         content: content.isNotEmpty ? content : null,
         mediaUrls: mediaUrls,
       );
 
-      if (success) {
+      if (createdPost != null) {
         Fluttertoast.showToast(
           msg: 'Đăng bài thành công!',
           backgroundColor: Colors.green,

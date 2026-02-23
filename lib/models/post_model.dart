@@ -13,8 +13,10 @@ class Post {
   
   // For display purposes
   final String? userName;
+  final String? username;
   final String? userAvatar;
   final bool? isLiked;
+  final String? groupId;
 
   Post({
     this.id,
@@ -29,8 +31,10 @@ class Post {
     this.createdAt,
     this.updatedAt,
     this.userName,
+    this.username,
     this.userAvatar,
     this.isLiked = false,
+    this.groupId,
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
@@ -53,8 +57,10 @@ class Post {
           ? DateTime.parse(json['updated_at']) 
           : null,
       userName: json['user_name'] as String?,
+      username: json['username'] as String?,
       userAvatar: json['user_avatar'] as String?,
       isLiked: json['is_liked'] as bool? ?? false,
+      groupId: json['group_id']?.toString() ?? json['groupId']?.toString(),
     );
   }
 
@@ -71,6 +77,7 @@ class Post {
       'shares_count': sharesCount,
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
+        if (groupId != null) 'group_id': groupId,
     };
   }
 
@@ -89,6 +96,7 @@ class Post {
     String? userName,
     String? userAvatar,
     bool? isLiked,
+    String? groupId,
   }) {
     return Post(
       id: id ?? this.id,
@@ -105,6 +113,7 @@ class Post {
       userName: userName ?? this.userName,
       userAvatar: userAvatar ?? this.userAvatar,
       isLiked: isLiked ?? this.isLiked,
+      groupId: groupId ?? this.groupId,
     );
   }
 }

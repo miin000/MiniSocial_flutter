@@ -131,6 +131,39 @@ class GroupService {
     }
   }
 
+  // Get posts of a group (approved or all depending on backend and auth)
+  Future<List<dynamic>> getGroupPosts(String groupId, {String? status}) async {
+    try {
+      final resp = await _apiService.get('/groups/$groupId/posts${status != null ? '?status=$status' : ''}');
+      return resp.data as List<dynamic>;
+    } on DioException catch (e) {
+      print('❌ GroupService: getGroupPosts error: ${e.message}');
+      return [];
+    } catch (e) {
+      print('❌ GroupService: getGroupPosts unexpected: $e');
+      return [];
+    }
+  }
+
+  // Create a post inside a group
+  Future<Map<String, dynamic>?> createGroupPost(String groupId, {required String content, List<String>? mediaUrls, String? contentType}) async {
+    try {
+      final data = {
+        'content': content,
+        if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_urls': mediaUrls,
+        if (contentType != null) 'content_type': contentType,
+      };
+      final resp = await _apiService.post('/groups/$groupId/posts', data: data);
+      return resp.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      print('❌ GroupService: createGroupPost error: ${e.message}');
+      return null;
+    } catch (e) {
+      print('❌ GroupService: createGroupPost unexpected: $e');
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>> joinGroup(String groupId) async {
     try {
       await _apiService.post('/groups/$groupId/join');
@@ -324,12 +357,13 @@ class GroupService {
   }
 
   Future<Map<String, dynamic>> updateGroup(
-      String groupId, String name, String description, String? avatar) async {
+      String groupId, String name, String description, String? avatar, {String? coverUrl}) async {
     try {
       final data = {
         'name': name,
         'description': description,
         if (avatar != null) 'avatar_url': avatar,
+        if (coverUrl != null) 'cover_url': coverUrl,
       };
       final response = await _apiService.put('/groups/$groupId', data: data);
       return {

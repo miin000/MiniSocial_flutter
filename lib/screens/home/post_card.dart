@@ -5,8 +5,11 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../models/post_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
+import '../../providers/group_provider.dart';
 import 'comments_screen.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import '../../config/app_config.dart';
+import 'package:flutter/services.dart';
 
 class PostCard extends StatefulWidget {
   final Post post;
@@ -18,12 +21,11 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard> {
-  int _currentImageIndex = 0; // Thêm biến theo dõi ảnh hiện tại
-  
+  int _currentImageIndex = 0;
+
   @override
   void initState() {
     super.initState();
-    // Configure timeago for Vietnamese
     timeago.setLocaleMessages('vi', timeago.ViMessages());
   }
 
@@ -50,15 +52,15 @@ class _PostCardState extends State<PostCard> {
               const Text('Vui lòng chọn lý do báo cáo:'),
               const SizedBox(height: 16),
               ...reasons.map((reason) => RadioListTile<String>(
-                    title: Text(reason, style: const TextStyle(fontSize: 14)),
-                    value: reason,
-                    groupValue: selectedReason,
-                    onChanged: (value) {
-                      setState(() {
-                        selectedReason = value;
-                      });
-                    },
-                  )),
+                title: Text(reason, style: const TextStyle(fontSize: 14)),
+                value: reason,
+                groupValue: selectedReason,
+                onChanged: (value) {
+                  setState(() {
+                    selectedReason = value;
+                  });
+                },
+              )),
             ],
           ),
           actions: [
@@ -70,23 +72,23 @@ class _PostCardState extends State<PostCard> {
               onPressed: selectedReason == null
                   ? null
                   : () async {
-                      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-                      final postProvider = Provider.of<PostProvider>(context, listen: false);
-                      
-                      final success = await postProvider.reportPost(
-                        reporterId: authProvider.user!.id!,
-                        reportedPostId: widget.post.id!,
-                        reason: selectedReason!,
-                      );
-                      
-                      if (mounted) {
-                        Navigator.pop(context);
-                        Fluttertoast.showToast(
-                          msg: success ? 'Đã gửi báo cáo' : 'Lỗi khi gửi báo cáo',
-                          backgroundColor: success ? Colors.green : Colors.red,
-                        );
-                      }
-                    },
+                final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                final postProvider = Provider.of<PostProvider>(context, listen: false);
+
+                final success = await postProvider.reportPost(
+                  reporterId: authProvider.user!.id!,
+                  reportedPostId: widget.post.id!,
+                  reason: selectedReason!,
+                );
+
+                if (mounted) {
+                  Navigator.pop(context);
+                  Fluttertoast.showToast(
+                    msg: success ? 'Đã gửi báo cáo' : 'Lỗi khi gửi báo cáo',
+                    backgroundColor: success ? Colors.green : Colors.red,
+                  );
+                }
+              },
               child: const Text('Gửi'),
             ),
           ],
@@ -160,23 +162,32 @@ class _PostCardState extends State<PostCard> {
                 CircleAvatar(
                   radius: 20,
                   backgroundColor: const Color(0xFF3b82f6),
-                  child: widget.post.userAvatar != null
+                  child: widget.post.userAvatar != null && widget.post.userAvatar!.isNotEmpty
                       ? ClipOval(
-                          child: CachedNetworkImage(
-                            imageUrl: widget.post.userAvatar!,
-                            width: 40,
-                            height: 40,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, url, error) => Text(
-                              widget.post.userName?.substring(0, 1).toUpperCase() ?? 'U',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        )
+                    child: CachedNetworkImage(
+                      imageUrl: widget.post.userAvatar!,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorWidget: (context, url, error) => Text(
+                        // An toàn: lấy ký tự đầu nếu có
+                        (widget.post.userName?.isNotEmpty == true
+                            ? widget.post.userName![0].toUpperCase()
+                            : (widget.post.username?.isNotEmpty == true
+                            ? widget.post.username![0].toUpperCase()
+                            : 'U')),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  )
                       : Text(
-                          widget.post.userName?.substring(0, 1).toUpperCase() ?? 'U',
-                          style: const TextStyle(color: Colors.white),
-                        ),
+                    (widget.post.userName?.isNotEmpty == true
+                        ? widget.post.userName![0].toUpperCase()
+                        : (widget.post.username?.isNotEmpty == true
+                        ? widget.post.username![0].toUpperCase()
+                        : 'U')),
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -184,16 +195,31 @@ class _PostCardState extends State<PostCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.post.userName ?? 'Người dùng',
+                        // Ưu tiên: userName (fullName) → username → fallback
+                        (widget.post.userName?.isNotEmpty == true
+                            ? widget.post.userName!
+                            : (widget.post.username?.isNotEmpty == true
+                            ? '@${widget.post.username!}'
+                            : 'Người dùng')),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
                         ),
                       ),
+                      if (widget.post.userName != null &&
+                          widget.post.userName!.isNotEmpty &&
+                          widget.post.userName != widget.post.username)
+                        Text(
+                          widget.post.userName!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                        ),
                       Text(
                         widget.post.createdAt != null
                             ? timeago.format(widget.post.createdAt!, locale: 'vi')
-                            : '',
+                            : 'Vừa xong',
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
@@ -219,7 +245,7 @@ class _PostCardState extends State<PostCard> {
                 style: const TextStyle(fontSize: 15),
               ),
             ),
-          
+
           const SizedBox(height: 8),
 
           // Post media with carousel indicator
@@ -249,7 +275,6 @@ class _PostCardState extends State<PostCard> {
                     },
                   ),
                 ),
-                // Hiển thị số thứ tự ảnh nếu có nhiều hơn 1 ảnh
                 if (widget.post.mediaUrls!.length > 1)
                   Positioned(
                     top: 8,
@@ -270,7 +295,6 @@ class _PostCardState extends State<PostCard> {
                       ),
                     ),
                   ),
-                // Hiển thị dots indicator nếu có nhiều hơn 1 ảnh
                 if (widget.post.mediaUrls!.length > 1)
                   Positioned(
                     bottom: 8,
@@ -280,7 +304,7 @@ class _PostCardState extends State<PostCard> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(
                         widget.post.mediaUrls!.length,
-                        (index) => Container(
+                            (index) => Container(
                           margin: const EdgeInsets.symmetric(horizontal: 3),
                           width: 6,
                           height: 6,
@@ -323,10 +347,14 @@ class _PostCardState extends State<PostCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // Like button
               TextButton.icon(
                 onPressed: () {
-                  postProvider.toggleLike(widget.post.id!, userId);
+                  if (widget.post.groupId != null) {
+                    final gp = Provider.of<GroupProvider>(context, listen: false);
+                    gp.toggleLikeOnGroupPost(widget.post.id!, userId);
+                  } else {
+                    postProvider.toggleLike(widget.post.id!, userId);
+                  }
                 },
                 icon: Icon(
                   widget.post.isLiked == true ? Icons.favorite : Icons.favorite_border,
@@ -339,8 +367,7 @@ class _PostCardState extends State<PostCard> {
                   ),
                 ),
               ),
-              
-              // Comment button
+
               TextButton.icon(
                 onPressed: () {
                   Navigator.push(
@@ -353,13 +380,16 @@ class _PostCardState extends State<PostCard> {
                 icon: const Icon(Icons.comment_outlined, color: Colors.grey),
                 label: const Text('Bình luận', style: TextStyle(color: Colors.grey)),
               ),
-              
-              // Share button (coming soon)
+
               TextButton.icon(
                 onPressed: () {
+                  final url = widget.post.groupId != null
+                      ? '${AppConfig.apiBaseUrl.replaceAll('/api/v1', '')}/groups/${widget.post.groupId}/posts/${widget.post.id}'
+                      : '${AppConfig.apiBaseUrl.replaceAll('/api/v1', '')}/posts/${widget.post.id}';
+                  Clipboard.setData(ClipboardData(text: url));
                   Fluttertoast.showToast(
-                    msg: 'Tính năng đang phát triển - sẽ tích hợp vào chat',
-                    backgroundColor: Colors.orange,
+                    msg: 'Đã sao chép liên kết bài viết',
+                    backgroundColor: Colors.green,
                   );
                 },
                 icon: const Icon(Icons.share_outlined, color: Colors.grey),

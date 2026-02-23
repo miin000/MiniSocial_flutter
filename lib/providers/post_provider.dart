@@ -6,7 +6,7 @@ import '../services/api_service.dart';
 
 class PostProvider with ChangeNotifier {
   final PostService _postService = PostService(ApiService().dio);
-  
+
   List<Post> _posts = [];
   bool _isLoading = false;
   String? _error;
@@ -39,7 +39,7 @@ class PostProvider with ChangeNotifier {
         userId: userId,
       );
       final List<Post> newPosts = result['posts'] as List<Post>;
-      
+
       if (refresh) {
         _posts = newPosts;
       } else {
@@ -57,7 +57,7 @@ class PostProvider with ChangeNotifier {
   }
 
   // Create post
-  Future<bool> createPost({
+  Future<Post?> createPost({
     required String userId,
     String? content,
     List<String>? mediaUrls,
@@ -71,13 +71,17 @@ class PostProvider with ChangeNotifier {
         groupId: groupId,
       );
 
-      _posts.insert(0, newPost);
-      notifyListeners();
-      return true;
+      // Only add to the main feed when the post is NOT created inside a group
+      if (groupId == null) {
+        _posts.insert(0, newPost);
+        notifyListeners();
+      }
+
+      return newPost;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
-      return false;
+      return null;
     }
   }
 
@@ -103,7 +107,7 @@ class PostProvider with ChangeNotifier {
       if (postIndex != -1) {
         final post = _posts[postIndex];
         final isLiked = post.isLiked ?? false;
-        
+
         _posts[postIndex] = post.copyWith(
           isLiked: !isLiked,
           likesCount: isLiked ? post.likesCount - 1 : post.likesCount + 1,
@@ -119,7 +123,7 @@ class PostProvider with ChangeNotifier {
       if (postIndex != -1) {
         final post = _posts[postIndex];
         final isLiked = post.isLiked ?? false;
-        
+
         _posts[postIndex] = post.copyWith(
           isLiked: !isLiked,
           likesCount: isLiked ? post.likesCount + 1 : post.likesCount - 1,

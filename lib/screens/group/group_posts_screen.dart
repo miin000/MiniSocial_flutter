@@ -15,7 +15,7 @@ class GroupPostsScreen extends StatefulWidget {
 class _GroupPostsScreenState extends State<GroupPostsScreen> {
   bool _isLoading = false;
   final List<Map<String, dynamic>> _posts = [];
-  final Map<int, int> _currentImageIndexes = {}; // Theo dõi index ảnh của từng post
+  final Map<int, int> _currentImageIndexes = {};
 
   @override
   void initState() {
@@ -25,12 +25,6 @@ class _GroupPostsScreenState extends State<GroupPostsScreen> {
 
   Future<void> _fetchGroupPosts() async {
     setState(() => _isLoading = true);
-    // TODO: Fetch posts from API using GroupProvider
-    // final result = await groupProvider.getGroupPosts(widget.groupId);
-    // setState(() {
-    //   _posts = result['posts'] ?? [];
-    //   _isLoading = false;
-    // });
     setState(() => _isLoading = false);
   }
 

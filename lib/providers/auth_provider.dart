@@ -125,6 +125,16 @@ class AuthProvider with ChangeNotifier {
     return result;
   }
 
+  Future<Map<String, dynamic>> updateProfile(UserModel updatedUser) async {
+    final result = await _authService.updateProfile(updatedUser);
+    if (result['success']) {
+      _user = result['user'];
+      await _saveUserData(_user!);
+      notifyListeners();
+    }
+    return result;
+  }
+
   // Đăng xuất
   Future<void> logout() async {
     _status = AuthStatus.loading;
