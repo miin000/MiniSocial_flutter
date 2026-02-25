@@ -20,6 +20,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final CloudinaryService _cloudinaryService = CloudinaryService();
   bool _isUploading = false;
   final ImagePicker _picker = ImagePicker();
+  String _visibility = 'public'; // 'public', 'friends', 'private'
 
   @override
   void dispose() {
@@ -113,6 +114,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         userId: userId,
         content: content.isNotEmpty ? content : null,
         mediaUrls: mediaUrls,
+        visibility: _visibility,
       );
 
       if (createdPost != null) {
@@ -138,6 +140,86 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         });
       }
     }
+  }
+
+  IconData _getVisibilityIcon() {
+    switch (_visibility) {
+      case 'friends':
+        return Icons.people;
+      case 'private':
+        return Icons.lock;
+      default:
+        return Icons.public;
+    }
+  }
+
+  String _getVisibilityLabel() {
+    switch (_visibility) {
+      case 'friends':
+        return 'Bạn bè';
+      case 'private':
+        return 'Chỉ mình tôi';
+      default:
+        return 'Công khai';
+    }
+  }
+
+  void _showVisibilityPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Ai có thể xem bài viết này?',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.public, color: Color(0xFF3b82f6)),
+                  title: const Text('Công khai'),
+                  subtitle: const Text('Mọi người đều có thể xem'),
+                  trailing: _visibility == 'public' ? const Icon(Icons.check, color: Color(0xFF3b82f6)) : null,
+                  onTap: () {
+                    setState(() => _visibility = 'public');
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.people, color: Color(0xFF10b981)),
+                  title: const Text('Bạn bè'),
+                  subtitle: const Text('Chỉ bạn bè mới xem được'),
+                  trailing: _visibility == 'friends' ? const Icon(Icons.check, color: Color(0xFF10b981)) : null,
+                  onTap: () {
+                    setState(() => _visibility = 'friends');
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.lock, color: Colors.orange),
+                  title: const Text('Chỉ mình tôi'),
+                  subtitle: const Text('Chỉ bạn mới xem được'),
+                  trailing: _visibility == 'private' ? const Icon(Icons.check, color: Colors.orange) : null,
+                  onTap: () {
+                    setState(() => _visibility = 'private');
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -216,15 +298,19 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const Row(
-                      children: [
-                        Icon(Icons.public, size: 14, color: Colors.grey),
-                        SizedBox(width: 4),
-                        Text(
-                          'Công khai',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
+                    GestureDetector(
+                      onTap: _showVisibilityPicker,
+                      child: Row(
+                        children: [
+                          Icon(_getVisibilityIcon(), size: 14, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            _getVisibilityLabel(),
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          const Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey),
+                        ],
+                      ),
                     ),
                   ],
                 ),

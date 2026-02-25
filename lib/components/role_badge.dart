@@ -23,6 +23,8 @@ class RoleBadge extends StatelessWidget {
         return Colors.blue.shade100;
       case MemberRole.member:
         return Colors.grey.shade100;
+      case MemberRole.none:
+        return Colors.red.shade50;
     }
   }
 
@@ -34,6 +36,8 @@ class RoleBadge extends StatelessWidget {
         return Colors.blue.shade900;
       case MemberRole.member:
         return Colors.grey.shade800;
+      case MemberRole.none:
+        return Colors.red.shade800;
     }
   }
 

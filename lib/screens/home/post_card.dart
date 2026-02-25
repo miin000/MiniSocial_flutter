@@ -216,14 +216,28 @@ class _PostCardState extends State<PostCard> {
                             color: Colors.grey[700],
                           ),
                         ),
-                      Text(
-                        widget.post.createdAt != null
-                            ? timeago.format(widget.post.createdAt!, locale: 'vi')
-                            : 'Vừa xong',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            widget.post.createdAt != null
+                                ? timeago.format(widget.post.createdAt!, locale: 'vi')
+                                : 'Vừa xong',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            widget.post.visibility == 'friends'
+                                ? Icons.people
+                                : widget.post.visibility == 'private'
+                                    ? Icons.lock
+                                    : Icons.public,
+                            size: 13,
+                            color: Colors.grey,
+                          ),
+                        ],
                       ),
                     ],
                   ),

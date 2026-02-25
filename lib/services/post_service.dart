@@ -69,6 +69,7 @@ class PostService {
     String? content,
     List<String>? mediaUrls,
     String? groupId,
+    String? visibility, // 'public', 'friends', 'private'
   }) async {
     try {
       final response = await _dio.post(
@@ -79,6 +80,7 @@ class PostService {
           if (content != null) 'content': content,
           if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_urls': mediaUrls,
           'content_type': mediaUrls != null && mediaUrls.isNotEmpty ? 'image' : 'text',
+          'visibility': visibility ?? 'public',
         },
       );
       return Post.fromJson(response.data);

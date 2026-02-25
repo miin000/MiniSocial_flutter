@@ -2,7 +2,7 @@
 
 import 'group_post_model.dart';
 
-enum MemberRole { owner, admin, member }
+enum MemberRole { owner, admin, member, none }
 
 extension MemberRoleExtension on MemberRole {
   String get displayName {
@@ -13,6 +13,8 @@ extension MemberRoleExtension on MemberRole {
         return 'Quản trị viên 🛡️';
       case MemberRole.member:
         return 'Thành viên 👤';
+      case MemberRole.none:
+        return 'Chưa tham gia';
     }
   }
 
@@ -24,6 +26,8 @@ extension MemberRoleExtension on MemberRole {
         return 'Quản trị viên';
       case MemberRole.member:
         return 'Thành viên';
+      case MemberRole.none:
+        return 'Chưa tham gia';
     }
   }
 
@@ -35,6 +39,8 @@ extension MemberRoleExtension on MemberRole {
         return '🛡️';
       case MemberRole.member:
         return '👤';
+      case MemberRole.none:
+        return '🚫';
     }
   }
 
@@ -54,6 +60,8 @@ class GroupModel {
   final List<Map<String, dynamic>> members;
   final int memberCount;
   final bool isJoined;
+  final bool requirePostApproval;
+  final bool requireMemberApproval;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final List<GroupPostModel> posts;
@@ -68,6 +76,8 @@ class GroupModel {
     this.members = const [],
     required this.memberCount,
     this.isJoined = false,
+    this.requirePostApproval = false,
+    this.requireMemberApproval = true,
     this.createdAt,
     this.updatedAt,
     this.posts = const [],
@@ -118,6 +128,8 @@ class GroupModel {
           json['memberCount'] ??
           membersJson.length,
       isJoined: true,
+      requirePostApproval: json['require_post_approval'] == true,
+      requireMemberApproval: json['require_member_approval'] != false, // default true
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'])
           : null,
@@ -150,6 +162,8 @@ class GroupModel {
     List<Map<String, dynamic>>? members,
     int? memberCount,
     bool? isJoined,
+    bool? requirePostApproval,
+    bool? requireMemberApproval,
     DateTime? createdAt,
     DateTime? updatedAt,
     List<GroupPostModel>? posts,
@@ -164,6 +178,8 @@ class GroupModel {
       members: members ?? this.members,
       memberCount: memberCount ?? this.memberCount,
       isJoined: isJoined ?? this.isJoined,
+      requirePostApproval: requirePostApproval ?? this.requirePostApproval,
+      requireMemberApproval: requireMemberApproval ?? this.requireMemberApproval,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       posts: posts ?? this.posts,
@@ -172,7 +188,7 @@ class GroupModel {
 
   // ================= FIX ROLE LOGIC =================
 
-  MemberRole getUserRole(String userId) {
+  MemberRole? getUserRole(String userId) {
     final uid = userId.toString();
 
     // 🔥 ƯU TIÊN OWNER TRƯỚC
@@ -194,14 +210,15 @@ class GroupModel {
       }
     }
 
-    return MemberRole.member;
+    // User is not in members list → not a member
+    return null;
   }
 
   bool isOwner(String userId) =>
       ownerId != null && ownerId!.toString() == userId.toString();
 
   bool isAdminUser(String userId) =>
-      getUserRole(userId).isAdmin;
+      getUserRole(userId)?.isAdmin ?? false;
 
   String? get cover => coverUrl ?? avatar;
 

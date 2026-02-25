@@ -46,25 +46,24 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Chỉ fetch lại nếu chưa join hoặc để sync với server
-      // Nếu vừa join (role != null), ta dùng data local từ provider
-      if (gp.currentUserRole == null) {
-        await gp.fetchGroupDetail(group.id);
-      }
-      
-      await gp.fetchGroupPosts(group.id, refresh: true);
+      // Always fetch group detail to get fresh member data with proper user names
+      await gp.fetchGroupDetail(group.id);
 
-      final currentGroup = gp.currentGroup ?? group;
       final currentUserId = widget.currentUserId.isNotEmpty
           ? widget.currentUserId
           : (Provider.of<AuthProvider>(context, listen: false).user?.id ?? '');
 
-      // Tính isJoined - BỎ currentGroup.isJoined vì backend trả sai
+      // Determine membership AFTER fetchGroupDetail returns fresh data
       final joined = gp.currentUserRole != null ||
           gp.groupMembers.any((m) {
             final uid = (m['userId'] ?? m['user_id'] ?? m['id'] ?? m['user']?['_id'] ?? '').toString();
             return uid == currentUserId;
           });
+
+      // Only fetch posts if user is a member — backend returns 403 for non-members
+      if (joined) {
+        await gp.fetchGroupPosts(group.id, refresh: true);
+      }
 
       if (mounted) {
         setState(() {
@@ -96,7 +95,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             currentUserId.isNotEmpty &&
             currentGroup.ownerId.toString() == currentUserId);
 
-    final userRole = isOwner ? MemberRole.owner : currentGroup.getUserRole(currentUserId);
+    final userRole = isOwner ? MemberRole.owner : (currentGroup.getUserRole(currentUserId) ?? MemberRole.none);
+
+    // Admin and moderator can see the pending posts tab
+    final canManagePosts = userRole == MemberRole.owner || userRole == MemberRole.admin;
+    final tabCount = canManagePosts ? 4 : 3;
 
     if (_isLoading) {
       return const Scaffold(
@@ -114,7 +117,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     }
 
     return DefaultTabController(
-      length: 3,
+      length: tabCount,
       child: Scaffold(
         backgroundColor: Colors.grey[100],
         appBar: AppBar(
@@ -275,14 +278,16 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    const TabBar(
+                    TabBar(
                       labelColor: Colors.blue,
                       unselectedLabelColor: Colors.grey,
                       indicatorColor: Colors.blue,
                       tabs: [
-                        Tab(text: "Bài viết"),
-                        Tab(text: "Thành viên"),
-                        Tab(text: "Thông tin"),
+                        const Tab(text: "Bài viết"),
+                        const Tab(text: "Thành viên"),
+                        const Tab(text: "Thông tin"),
+                        if (canManagePosts)
+                          const Tab(text: "Duyệt bài"),
                       ],
                     ),
                   ],
@@ -293,8 +298,10 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           body: TabBarView(
             children: [
               _PostsTab(group: currentGroup, currentUserId: currentUserId),
-              _MembersTab(group: currentGroup, currentUserId: currentUserId),
+              _MembersTab(group: currentGroup, currentUserId: currentUserId, userRole: userRole),
               _InfoTab(group: currentGroup),
+              if (canManagePosts)
+                _PendingPostsTab(group: currentGroup, currentUserId: currentUserId),
             ],
           ),
         ),
@@ -397,6 +404,20 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   }
 
   void _leaveGroup() {
+    final gp = Provider.of<GroupProvider>(context, listen: false);
+    final currentUserId = widget.currentUserId.isNotEmpty
+        ? widget.currentUserId
+        : (Provider.of<AuthProvider>(context, listen: false).user?.id ?? '');
+
+    // Check if user is admin - must transfer admin first
+    final isAdmin = gp.isCurrentUserAdmin ||
+        (gp.currentGroup?.ownerId != null && gp.currentGroup!.ownerId == currentUserId);
+
+    if (isAdmin) {
+      _showTransferAdminBeforeLeave(context);
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -411,30 +432,148 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               Navigator.pop(context);
-
-              final gp = Provider.of<GroupProvider>(context, listen: false);
-              final currentUserId = widget.currentUserId.isNotEmpty
-                  ? widget.currentUserId
-                  : (Provider.of<AuthProvider>(context, listen: false).user?.id ?? '');
-
-              final res = await gp.leaveGroup(group.id, currentUserId: currentUserId);
-
-              if (res['success']) {
-                Fluttertoast.showToast(msg: 'Đã rời nhóm', backgroundColor: Colors.green);
-
-                // Refresh lại dữ liệu sau khi rời
-                await _reloadGroupData();
-                await gp.fetchGroups(authProvider: Provider.of<AuthProvider>(context, listen: false));
-
-                if (mounted) Navigator.pop(context, true);
-              } else {
-                Fluttertoast.showToast(
-                  msg: res['message'] ?? 'Không thể rời nhóm',
-                  backgroundColor: Colors.red,
-                );
-              }
+              await _performLeaveGroup();
             },
             child: const Text("Rời nhóm"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performLeaveGroup() async {
+    final gp = Provider.of<GroupProvider>(context, listen: false);
+    final currentUserId = widget.currentUserId.isNotEmpty
+        ? widget.currentUserId
+        : (Provider.of<AuthProvider>(context, listen: false).user?.id ?? '');
+
+    final res = await gp.leaveGroup(group.id, currentUserId: currentUserId);
+
+    if (res['success']) {
+      Fluttertoast.showToast(msg: 'Đã rời nhóm', backgroundColor: Colors.green);
+      await _reloadGroupData();
+      await gp.fetchGroups(authProvider: Provider.of<AuthProvider>(context, listen: false));
+      if (mounted) Navigator.pop(context, true);
+    } else {
+      Fluttertoast.showToast(
+        msg: res['message'] ?? 'Không thể rời nhóm',
+        backgroundColor: Colors.red,
+      );
+    }
+  }
+
+  void _showTransferAdminBeforeLeave(BuildContext context) {
+    final gp = Provider.of<GroupProvider>(context, listen: false);
+    final currentUserId = widget.currentUserId.isNotEmpty
+        ? widget.currentUserId
+        : (Provider.of<AuthProvider>(context, listen: false).user?.id ?? '');
+
+    // Get all non-admin members to transfer to
+    final members = gp.groupMembers.where((m) {
+      final uid = (m['userId'] ?? m['user_id'] ?? m['user']?['_id'] ?? '').toString();
+      return uid != currentUserId;
+    }).toList();
+
+    if (members.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Không thể rời nhóm"),
+          content: const Text("Bạn là thành viên duy nhất trong nhóm. Bạn có muốn xóa nhóm không?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Hủy"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                Navigator.pop(context);
+                final res = await gp.deleteGroup(group.id);
+                if (res['success']) {
+                  Fluttertoast.showToast(msg: 'Đã xóa nhóm', backgroundColor: Colors.green);
+                  if (mounted) Navigator.pop(context, true);
+                } else {
+                  Fluttertoast.showToast(
+                    msg: res['message'] ?? 'Không thể xóa nhóm',
+                    backgroundColor: Colors.red,
+                  );
+                }
+              },
+              child: const Text("Xóa nhóm"),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Chuyển quyền trưởng nhóm"),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Bạn cần chuyển quyền trưởng nhóm cho một thành viên khác trước khi rời nhóm.",
+                style: TextStyle(fontSize: 14, color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              const Text("Chọn trưởng nhóm mới:", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: members.length,
+                  itemBuilder: (context, index) {
+                    final m = members[index];
+                    final userObj = m['user'] != null ? Map<String, dynamic>.from(m['user'] as Map) : null;
+                    final memberId = (m['userId'] ?? m['user_id'] ?? userObj?['_id'] ?? '').toString();
+                    final name = (userObj?['fullName'] ?? userObj?['username'] ?? m['fullName'] ?? m['username'] ?? memberId).toString();
+                    final avatarUrl = (userObj?['avatarUrl'] ?? userObj?['avatar_url'] ?? userObj?['avatar'] ?? m['avatar_url'] ?? m['avatar'] ?? '').toString();
+                    final roleRaw = (m['role']?.toString().toUpperCase() ?? 'MEMBER');
+
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                        child: avatarUrl.isEmpty ? Text(name.isNotEmpty ? name[0].toUpperCase() : 'U') : null,
+                      ),
+                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                        roleRaw == 'MODERATOR' ? 'Quản trị viên' : 'Thành viên',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        // Transfer admin then leave
+                        final transferRes = await gp.transferOwnership(group.id, memberId);
+                        if (transferRes['success']) {
+                          Fluttertoast.showToast(msg: 'Đã chuyển quyền cho $name', backgroundColor: Colors.green);
+                          await _performLeaveGroup();
+                        } else {
+                          Fluttertoast.showToast(
+                            msg: transferRes['message'] ?? 'Không thể chuyển quyền',
+                            backgroundColor: Colors.red,
+                          );
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Hủy"),
           ),
         ],
       ),
@@ -473,10 +612,14 @@ class _PostsTab extends StatelessWidget {
         }
 
         if (groupPosts.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+          return SingleChildScrollView(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
                 Icon(
                   Icons.article_outlined,
                   size: 80,
@@ -499,9 +642,9 @@ class _PostsTab extends StatelessWidget {
                     color: Colors.grey[600],
                   ),
                 ),
-                const SizedBox(height: 24),
-                Builder(builder: (context) {
-                  final provider = Provider.of<GroupProvider>(context);
+                  const SizedBox(height: 24),
+                  Builder(builder: (context) {
+                    final provider = Provider.of<GroupProvider>(context);
 
                   // check membership
                   Map<String, dynamic>? memberObj;
@@ -514,46 +657,48 @@ class _PostsTab extends StatelessWidget {
                     memberObj = null;
                   }
 
-                  final isActiveMember = memberObj != null ||
-                      provider.currentUserRole != null ||
-                      provider.groupMembers.any((m) {
-                        final uid = (m['userId'] ?? m['user_id'])?.toString();
-                        return uid == currentUserId;
-                      });
+                    final isActiveMember = memberObj != null ||
+                        provider.currentUserRole != null ||
+                        provider.groupMembers.any((m) {
+                          final uid = (m['userId'] ?? m['user_id'])?.toString();
+                          return uid == currentUserId;
+                        });
 
-                  if (!isActiveMember) {
+                    if (!isActiveMember) {
+                      return OutlinedButton.icon(
+                        onPressed: () {
+                          Fluttertoast.showToast(msg: 'Bạn cần tham gia nhóm để đăng bài');
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Đăng bài ngay'),
+                      );
+                    }
+
                     return OutlinedButton.icon(
                       onPressed: () {
-                        Fluttertoast.showToast(msg: 'Bạn cần tham gia nhóm để đăng bài');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CreatePostInGroupScreen(
+                              group: group,
+                              currentUserId: currentUserId,
+                            ),
+                          ),
+                        ).then((value) {
+                          if (value == true) {
+                            gp.fetchGroupPosts(group.id, refresh: true);
+                          }
+                        });
                       },
                       icon: const Icon(Icons.add),
                       label: const Text('Đăng bài ngay'),
                     );
-                  }
-
-                  return OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CreatePostInGroupScreen(
-                            group: group,
-                            currentUserId: currentUserId,
-                          ),
-                        ),
-                      ).then((value) {
-                        if (value == true) {
-                          gp.fetchGroupPosts(group.id, refresh: true);
-                        }
-                      });
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Đăng bài ngay'),
-                  );
-                }),
-              ],
+                  }),
+                ],
+              ),
             ),
-          );
+          ),
+        );
         }
 
         return RefreshIndicator(
@@ -601,8 +746,9 @@ class _PostsTab extends StatelessWidget {
 class _MembersTab extends StatelessWidget {
   final GroupModel group;
   final String currentUserId;
+  final MemberRole userRole;
 
-  const _MembersTab({required this.group, required this.currentUserId});
+  const _MembersTab({required this.group, required this.currentUserId, required this.userRole});
 
   @override
   Widget build(BuildContext context) {
@@ -698,13 +844,145 @@ class _MembersTab extends StatelessWidget {
               ),
             ],
           ),
-          trailing: effectiveRole == 'ADMIN'
-              ? const Icon(Icons.verified, color: Colors.amber)
-              : effectiveRole == 'MODERATOR'
-              ? const Icon(Icons.shield, color: Colors.blue, size: 18)
-              : null,
+          trailing: _buildMemberActions(context, gp, current, memberId, name, effectiveRole),
         );
       },
+    );
+  }
+
+  Widget? _buildMemberActions(BuildContext context, GroupProvider gp, GroupModel current, String memberId, String name, String effectiveRole) {
+    // Don't show actions for self
+    if (memberId == currentUserId) {
+      if (effectiveRole == 'ADMIN') return const Icon(Icons.verified, color: Colors.amber);
+      if (effectiveRole == 'MODERATOR') return const Icon(Icons.shield, color: Colors.blue, size: 18);
+      return null;
+    }
+
+    // Build action list based on current user's role
+    final List<PopupMenuEntry<String>> menuItems = [];
+
+    if (userRole == MemberRole.owner) {
+      // Admin (owner) can: promote to mod, demote mod, transfer admin, remove
+      if (effectiveRole == 'MEMBER') {
+        menuItems.add(const PopupMenuItem(value: 'promote_mod', child: ListTile(
+          leading: Icon(Icons.shield, color: Colors.blue),
+          title: Text('Thăng cấp Quản trị viên'),
+          dense: true, contentPadding: EdgeInsets.zero,
+        )));
+      }
+      if (effectiveRole == 'MODERATOR') {
+        menuItems.add(const PopupMenuItem(value: 'demote', child: ListTile(
+          leading: Icon(Icons.person, color: Colors.orange),
+          title: Text('Giáng cấp về Thành viên'),
+          dense: true, contentPadding: EdgeInsets.zero,
+        )));
+      }
+      if (effectiveRole != 'ADMIN') {
+        menuItems.add(const PopupMenuItem(value: 'transfer_admin', child: ListTile(
+          leading: Icon(Icons.verified, color: Colors.amber),
+          title: Text('Chuyển quyền Trưởng nhóm'),
+          dense: true, contentPadding: EdgeInsets.zero,
+        )));
+        menuItems.add(const PopupMenuItem(value: 'remove', child: ListTile(
+          leading: Icon(Icons.remove_circle, color: Colors.red),
+          title: Text('Xóa khỏi nhóm'),
+          dense: true, contentPadding: EdgeInsets.zero,
+        )));
+      }
+    } else if (userRole == MemberRole.admin) {
+      // Moderator can: remove regular members only
+      if (effectiveRole == 'MEMBER') {
+        menuItems.add(const PopupMenuItem(value: 'remove', child: ListTile(
+          leading: Icon(Icons.remove_circle, color: Colors.red),
+          title: Text('Xóa khỏi nhóm'),
+          dense: true, contentPadding: EdgeInsets.zero,
+        )));
+      }
+    }
+
+    if (menuItems.isEmpty) {
+      if (effectiveRole == 'ADMIN') return const Icon(Icons.verified, color: Colors.amber);
+      if (effectiveRole == 'MODERATOR') return const Icon(Icons.shield, color: Colors.blue, size: 18);
+      return null;
+    }
+
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, color: Colors.grey),
+      onSelected: (value) async {
+        switch (value) {
+          case 'promote_mod':
+            final res = await gp.updateGroupMemberRole(current.id, memberId, 'MODERATOR');
+            Fluttertoast.showToast(
+              msg: res['success'] ? 'Đã thăng cấp $name thành Quản trị viên' : (res['message'] ?? 'Lỗi'),
+              backgroundColor: res['success'] ? Colors.green : Colors.red,
+            );
+            break;
+          case 'demote':
+            final res = await gp.updateGroupMemberRole(current.id, memberId, 'MEMBER');
+            Fluttertoast.showToast(
+              msg: res['success'] ? 'Đã giáng cấp $name về Thành viên' : (res['message'] ?? 'Lỗi'),
+              backgroundColor: res['success'] ? Colors.green : Colors.red,
+            );
+            break;
+          case 'transfer_admin':
+            _showTransferConfirmation(context, gp, current, memberId, name);
+            break;
+          case 'remove':
+            _showRemoveConfirmation(context, gp, current, memberId, name);
+            break;
+        }
+      },
+      itemBuilder: (_) => menuItems,
+    );
+  }
+
+  void _showTransferConfirmation(BuildContext context, GroupProvider gp, GroupModel current, String memberId, String name) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Chuyển quyền trưởng nhóm"),
+        content: Text("Bạn có chắc chắn muốn chuyển quyền trưởng nhóm cho $name? Bạn sẽ trở thành thành viên thường."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Hủy")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber[700]),
+            onPressed: () async {
+              Navigator.pop(context);
+              final res = await gp.transferOwnership(current.id, memberId);
+              Fluttertoast.showToast(
+                msg: res['success'] ? 'Đã chuyển quyền cho $name' : (res['message'] ?? 'Lỗi'),
+                backgroundColor: res['success'] ? Colors.green : Colors.red,
+              );
+            },
+            child: const Text("Xác nhận"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRemoveConfirmation(BuildContext context, GroupProvider gp, GroupModel current, String memberId, String name) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Xóa thành viên"),
+        content: Text("Bạn có chắc chắn muốn xóa $name khỏi nhóm?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Hủy")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(context);
+              final res = await gp.removeMember(current.id, memberId);
+              Fluttertoast.showToast(
+                msg: res['success'] ? 'Đã xóa $name khỏi nhóm' : (res['message'] ?? 'Lỗi'),
+                backgroundColor: res['success'] ? Colors.green : Colors.red,
+              );
+            },
+            child: const Text("Xóa"),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -788,5 +1066,266 @@ class _InfoTab extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _PendingPostsTab extends StatefulWidget {
+  final GroupModel group;
+  final String currentUserId;
+
+  const _PendingPostsTab({required this.group, required this.currentUserId});
+
+  @override
+  State<_PendingPostsTab> createState() => _PendingPostsTabState();
+}
+
+class _PendingPostsTabState extends State<_PendingPostsTab> {
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPendingPosts();
+    });
+  }
+
+  Future<void> _loadPendingPosts() async {
+    final gp = Provider.of<GroupProvider>(context, listen: false);
+    await gp.fetchPendingPosts(widget.group.id);
+    if (mounted) setState(() => _loaded = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<GroupProvider>(
+      builder: (context, gp, child) {
+        if (gp.isLoadingPendingPosts && !_loaded) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Đang tải bài viết chờ duyệt...'),
+              ],
+            ),
+          );
+        }
+
+        final pendingPosts = gp.pendingPosts;
+
+        if (pendingPosts.isEmpty) {
+          return SingleChildScrollView(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 48),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_outline, size: 80, color: Colors.green[300]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Không có bài viết nào chờ duyệt',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tất cả bài viết đã được xử lý',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: _loadPendingPosts,
+          child: ListView.builder(
+            padding: const EdgeInsets.all(8),
+            itemCount: pendingPosts.length,
+            itemBuilder: (context, index) {
+              final post = pendingPosts[index];
+              return _PendingPostCard(
+                post: post,
+                groupId: widget.group.id,
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PendingPostCard extends StatelessWidget {
+  final dynamic post;
+  final String groupId;
+
+  const _PendingPostCard({required this.post, required this.groupId});
+
+  @override
+  Widget build(BuildContext context) {
+    final String content = post.content ?? '';
+    final String authorName = post.userName ?? post.userId ?? 'Người dùng';
+    final String? authorAvatar = post.userAvatar;
+    final DateTime? createdAt = post.createdAt;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Author info
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: authorAvatar != null && authorAvatar.isNotEmpty
+                      ? NetworkImage(authorAvatar)
+                      : null,
+                  child: authorAvatar == null || authorAvatar.isEmpty
+                      ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : 'U')
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(authorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      if (createdAt != null)
+                        Text(_formatDate(createdAt), style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text('Chờ duyệt', style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Post content
+            Text(content, style: const TextStyle(fontSize: 15)),
+
+            // Media if any
+            if (post.mediaUrls != null && (post.mediaUrls as List).isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  (post.mediaUrls as List).first.toString(),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: 200,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ],
+
+            const Divider(height: 24),
+
+            // Approve / Reject buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.check, color: Colors.white, size: 20),
+                    label: const Text('Duyệt'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () async {
+                      final gp = Provider.of<GroupProvider>(context, listen: false);
+                      final res = await gp.approveGroupPost(groupId, post.id!);
+                      Fluttertoast.showToast(
+                        msg: res['success'] ? 'Đã duyệt bài viết!' : (res['message'] ?? 'Lỗi'),
+                        backgroundColor: res['success'] ? Colors.green : Colors.red,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                    label: const Text('Từ chối', style: TextStyle(color: Colors.red)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () => _showRejectDialog(context),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRejectDialog(BuildContext context) {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Từ chối bài viết'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Nhập lý do từ chối (không bắt buộc):'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Lý do...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(context);
+              final gp = Provider.of<GroupProvider>(context, listen: false);
+              final reason = reasonController.text.trim().isEmpty ? null : reasonController.text.trim();
+              final res = await gp.rejectGroupPost(groupId, post.id!, reason: reason);
+              Fluttertoast.showToast(
+                msg: res['success'] ? 'Đã từ chối bài viết!' : (res['message'] ?? 'Lỗi'),
+                backgroundColor: res['success'] ? Colors.green : Colors.red,
+              );
+            },
+            child: const Text('Từ chối'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inMinutes < 60) return '${diff.inMinutes} phút trước';
+    if (diff.inHours < 24) return '${diff.inHours} giờ trước';
+    return '${date.day}/${date.month}/${date.year}';
   }
 }

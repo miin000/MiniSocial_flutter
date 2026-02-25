@@ -111,6 +111,7 @@ class _GroupListScreenState extends State<GroupListScreen> {
   // Badge vai trò (trưởng nhóm / quản trị)
   Widget? _roleBadge(GroupModel group, String userId) {
     final role = group.getUserRole(userId);
+    if (role == null || role == MemberRole.none) return null;
     if (role == MemberRole.owner) {
       return _badge(
         icon: Icons.star_rounded,

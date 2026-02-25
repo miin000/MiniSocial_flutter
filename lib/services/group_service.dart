@@ -166,8 +166,14 @@ class GroupService {
 
   Future<Map<String, dynamic>> joinGroup(String groupId) async {
     try {
-      await _apiService.post('/groups/$groupId/join');
-      return {'success': true, 'message': 'Tham gia nhóm thành công!'};
+      final resp = await _apiService.post('/groups/$groupId/join');
+      final memberStatus = (resp.data is Map ? (resp.data['status']?.toString() ?? '') : '');
+      final isPending = memberStatus.toUpperCase() == 'PENDING';
+      return {
+        'success': true,
+        'message': isPending ? 'Yêu cầu tham gia đã được gửi, chờ duyệt!' : 'Tham gia nhóm thành công!',
+        'isPending': isPending,
+      };
     } on DioException catch (e) {
       String message = 'Lỗi tham gia nhóm';
       if (e.response?.statusCode == 403) {
@@ -246,7 +252,7 @@ class GroupService {
 
   Future<Map<String, dynamic>> transferOwnership(String groupId, String newOwnerId) async {
     try {
-      await _apiService.put('/groups/$groupId/ownership', data: {'newOwnerId': newOwnerId});
+      await _apiService.post('/groups/$groupId/transfer-admin', data: {'new_admin_id': newOwnerId});
       return {'success': true, 'message': 'Chuyển quyền thành công!'};
     } on DioException catch (e) {
       String message = 'Lỗi chuyển quyền';
@@ -262,6 +268,69 @@ class GroupService {
       return {'success': false, 'message': message, 'statusCode': e.response?.statusCode};
     } catch (e) {
       return {'success': false, 'message': 'Lỗi chuyển quyền: $e'};
+    }
+  }
+
+  // Get pending join requests (admin/mod only)
+  Future<List<dynamic>> getPendingMembers(String groupId) async {
+    try {
+      final resp = await _apiService.get('/groups/$groupId/pending-members');
+      return resp.data as List<dynamic>;
+    } on DioException catch (e) {
+      print('❌ GroupService: getPendingMembers error: ${e.message} (${e.response?.statusCode})');
+      return [];
+    } catch (e) {
+      print('❌ GroupService: getPendingMembers unexpected: $e');
+      return [];
+    }
+  }
+
+  // Approve a pending member (admin/mod only)
+  Future<Map<String, dynamic>> approvePendingMember(String groupId, String memberId) async {
+    try {
+      await _apiService.post('/groups/$groupId/members/$memberId/approve');
+      return {'success': true, 'message': 'Đã duyệt thành viên!'};
+    } on DioException catch (e) {
+      String message = 'Lỗi duyệt thành viên';
+      if (e.response?.data?['message'] != null) message = e.response!.data['message'];
+      return {'success': false, 'message': message};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi: $e'};
+    }
+  }
+
+  // Reject a pending member (admin/mod only)
+  Future<Map<String, dynamic>> rejectPendingMember(String groupId, String memberId) async {
+    try {
+      await _apiService.post('/groups/$groupId/members/$memberId/reject');
+      return {'success': true, 'message': 'Đã từ chối yêu cầu!'};
+    } on DioException catch (e) {
+      String message = 'Lỗi từ chối thành viên';
+      if (e.response?.data?['message'] != null) message = e.response!.data['message'];
+      return {'success': false, 'message': message};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi: $e'};
+    }
+  }
+
+  // Update group approval settings
+  Future<Map<String, dynamic>> updateGroupSettings(
+    String groupId, {
+    bool? requirePostApproval,
+    bool? requireMemberApproval,
+  }) async {
+    try {
+      final data = <String, dynamic>{};
+      if (requirePostApproval != null) data['require_post_approval'] = requirePostApproval;
+      if (requireMemberApproval != null) data['require_member_approval'] = requireMemberApproval;
+      await _apiService.put('/groups/$groupId', data: data);
+      return {'success': true, 'message': 'Cập nhật cài đặt thành công!'};
+    } on DioException catch (e) {
+      String message = 'Lỗi cập nhật cài đặt';
+      if (e.response?.data?['message'] != null) message = e.response!.data['message'];
+      return {'success': false, 'message': message};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi: $e'};
     }
   }
 
@@ -390,4 +459,48 @@ class GroupService {
 
 
 // Thêm hàm cho getGroupDetail, updateGroup, etc. nếu cần
+
+  // Get pending posts for approval (admin/mod only)
+  Future<List<dynamic>> getPendingPosts(String groupId) async {
+    try {
+      final resp = await _apiService.get('/groups/$groupId/posts/pending/list');
+      return resp.data as List<dynamic>;
+    } on DioException catch (e) {
+      print('❌ GroupService: getPendingPosts error: ${e.message}');
+      return [];
+    } catch (e) {
+      print('❌ GroupService: getPendingPosts unexpected: $e');
+      return [];
+    }
+  }
+
+  // Approve a pending post (admin/mod only)
+  Future<Map<String, dynamic>> approvePost(String groupId, String postId) async {
+    try {
+      await _apiService.post('/groups/$groupId/posts/$postId/approve');
+      return {'success': true, 'message': 'Đã duyệt bài viết!'};
+    } on DioException catch (e) {
+      String message = 'Lỗi duyệt bài viết';
+      if (e.response?.data?['message'] != null) message = e.response!.data['message'];
+      return {'success': false, 'message': message};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi: $e'};
+    }
+  }
+
+  // Reject a pending post (admin/mod only)
+  Future<Map<String, dynamic>> rejectPost(String groupId, String postId, {String? reason}) async {
+    try {
+      await _apiService.post('/groups/$groupId/posts/$postId/reject', data: {
+        if (reason != null) 'rejected_reason': reason,
+      });
+      return {'success': true, 'message': 'Đã từ chối bài viết!'};
+    } on DioException catch (e) {
+      String message = 'Lỗi từ chối bài viết';
+      if (e.response?.data?['message'] != null) message = e.response!.data['message'];
+      return {'success': false, 'message': message};
+    } catch (e) {
+      return {'success': false, 'message': 'Lỗi: $e'};
+    }
+  }
 }

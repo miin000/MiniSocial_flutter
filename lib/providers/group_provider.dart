@@ -16,9 +16,12 @@ class GroupProvider with ChangeNotifier {
   List<GroupModel> _suggestedGroups = [];
   GroupModel? _currentGroup;
   List<Map<String, dynamic>> _groupMembers = [];
+  List<Map<String, dynamic>> _pendingMembers = [];
   String? _currentUserRole;
 
   final Map<String, List<Post>> _groupPosts = {};
+  List<Post> _pendingPosts = [];
+  bool _isLoadingPendingPosts = false;
 
   bool _isLoading = false;
   bool _isLoadingPosts = false;
@@ -28,14 +31,24 @@ class GroupProvider with ChangeNotifier {
   List<GroupModel> get suggestedGroups => _suggestedGroups;
   GroupModel? get currentGroup => _currentGroup;
   List<Map<String, dynamic>> get groupMembers => _groupMembers;
+  List<Map<String, dynamic>> get pendingMembers => _pendingMembers;
   String? get currentUserRole => _currentUserRole;
   bool get isLoading => _isLoading;
   bool get isLoadingPosts => _isLoadingPosts;
+  bool get isLoadingPendingPosts => _isLoadingPendingPosts;
+  List<Post> get pendingPosts => _pendingPosts;
   String? get errorMessage => _errorMessage;
 
   bool get isCurrentUserAdmin =>
       _currentUserRole != null &&
           _currentUserRole!.toUpperCase() == 'ADMIN';
+
+  bool get isCurrentUserModerator =>
+      _currentUserRole != null &&
+          _currentUserRole!.toUpperCase() == 'MODERATOR';
+
+  bool get isCurrentUserAdminOrModerator =>
+      isCurrentUserAdmin || isCurrentUserModerator;
 
   List<Post> getGroupPosts(String groupId) => _groupPosts[groupId] ?? [];
 
@@ -171,9 +184,7 @@ class GroupProvider with ChangeNotifier {
         final existing = existingMap[serverPost.id];
         if (existing != null) {
           return serverPost.copyWith(
-            isLiked: existing.isLiked,
-            likesCount: existing.likesCount,
-            commentsCount: existing.commentsCount,
+            isLiked: serverPost.isLiked ?? existing.isLiked,
           );
         }
         return serverPost;
@@ -297,38 +308,34 @@ class GroupProvider with ChangeNotifier {
     
     if (result['success']) {
       final uid = currentUserId ?? '';
+      final isPending = result['isPending'] == true;
       
-      // 1. Thêm user vào danh sách thành viên ngay lập tức
-      if (uid.isNotEmpty) {
-        _groupMembers.add({
-          'userId': uid,
-          'user_id': uid,
-          'id': uid,
-          'role': 'MEMBER',
-          'status': 'ACTIVE',
-          'joined_at': DateTime.now().toIso8601String(),
-        });
+      if (!isPending) {
+        // Auto-approved: add to active members
+        if (uid.isNotEmpty) {
+          _groupMembers.add({
+            'userId': uid,
+            'user_id': uid,
+            'id': uid,
+            'role': 'MEMBER',
+            'status': 'ACTIVE',
+            'joined_at': DateTime.now().toIso8601String(),
+          });
+        }
+        // Update member count
+        if (_currentGroup != null) {
+          _currentGroup = _currentGroup!.copyWith(memberCount: _currentGroup!.memberCount + 1);
+        }
+        // Set role
+        _currentUserRole = 'MEMBER';
+        // Move from suggested to myGroups
+        final groupIndex = _suggestedGroups.indexWhere((g) => g.id == groupId);
+        if (groupIndex != -1) {
+          final groupToAdd = _suggestedGroups.removeAt(groupIndex);
+          _myGroups.insert(0, groupToAdd.copyWith(memberCount: groupToAdd.memberCount + 1, isJoined: true));
+        }
       }
-      
-      // 2. Cập nhật memberCount
-      if (_currentGroup != null) {
-        final newCount = _currentGroup!.memberCount + 1;
-        _currentGroup = _currentGroup!.copyWith(memberCount: newCount);
-      }
-      
-      // 3. Cập nhật role hiện tại
-      _currentUserRole = 'MEMBER';
-      
-      // 4. Chuyển nhóm từ suggestedGroups sang myGroups
-      final groupIndex = _suggestedGroups.indexWhere((g) => g.id == groupId);
-      if (groupIndex != -1) {
-        final groupToAdd = _suggestedGroups.removeAt(groupIndex);
-        final updatedGroup = groupToAdd.copyWith(
-          memberCount: groupToAdd.memberCount + 1,
-          isJoined: true,
-        );
-        _myGroups.insert(0, updatedGroup);
-      }
+      // If pending, do NOT add to active members — user must wait for approval
       
       notifyListeners();
     }
@@ -341,6 +348,9 @@ class GroupProvider with ChangeNotifier {
 
     if (result['success']) {
       final uid = currentUserId ?? '';
+
+      // Clear role immediately so callers know user is no longer a member
+      _currentUserRole = null;
 
       _groupMembers.removeWhere((m) {
         final id = (m['userId'] ?? m['user_id'])?.toString() ?? '';
@@ -391,6 +401,72 @@ class GroupProvider with ChangeNotifier {
     return result;
   }
 
+  // ── Pending member management ───────────────────────────────────────────────
+
+  Future<void> fetchPendingMembers(String groupId) async {
+    try {
+      final raw = await _groupService.getPendingMembers(groupId);
+      _pendingMembers = raw
+          .map((m) => Map<String, dynamic>.from(m as Map))
+          .toList();
+      notifyListeners();
+    } catch (e) {
+      print('fetchPendingMembers error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> approvePendingMember(String groupId, String memberId) async {
+    final result = await _groupService.approvePendingMember(groupId, memberId);
+    if (result['success']) {
+      _pendingMembers.removeWhere((m) => m['_id']?.toString() == memberId);
+      if (_currentGroup != null) {
+        _currentGroup = _currentGroup!.copyWith(memberCount: _currentGroup!.memberCount + 1);
+      }
+      notifyListeners();
+      await fetchGroupDetail(groupId);
+    }
+    return result;
+  }
+
+  Future<Map<String, dynamic>> rejectPendingMember(String groupId, String memberId) async {
+    final result = await _groupService.rejectPendingMember(groupId, memberId);
+    if (result['success']) {
+      _pendingMembers.removeWhere((m) => m['_id']?.toString() == memberId);
+      notifyListeners();
+    }
+    return result;
+  }
+
+  Future<Map<String, dynamic>> updateGroupSettings(
+    String groupId, {
+    bool? requirePostApproval,
+    bool? requireMemberApproval,
+  }) async {
+    final result = await _groupService.updateGroupSettings(
+      groupId,
+      requirePostApproval: requirePostApproval,
+      requireMemberApproval: requireMemberApproval,
+    );
+    if (result['success']) {
+      if (_currentGroup != null) {
+        _currentGroup = _currentGroup!.copyWith(
+          requirePostApproval: requirePostApproval ?? _currentGroup!.requirePostApproval,
+          requireMemberApproval: requireMemberApproval ?? _currentGroup!.requireMemberApproval,
+        );
+      }
+      // Sync myGroups too
+      final idx = _myGroups.indexWhere((g) => g.id == groupId);
+      if (idx != -1) {
+        _myGroups[idx] = _myGroups[idx].copyWith(
+          requirePostApproval: requirePostApproval ?? _myGroups[idx].requirePostApproval,
+          requireMemberApproval: requireMemberApproval ?? _myGroups[idx].requireMemberApproval,
+        );
+      }
+      notifyListeners();
+    }
+    return result;
+  }
+
   Future<Map<String, dynamic>> removeMember(String groupId, String userId) async {
     final result = await _groupService.removeMember(groupId, userId);
     if (result['success']) await fetchGroupDetail(groupId);
@@ -425,6 +501,44 @@ class GroupProvider with ChangeNotifier {
     return result;
   }
 
+  // ── Pending posts management ─────────────────────────────────────────────
+
+  Future<void> fetchPendingPosts(String groupId) async {
+    _isLoadingPendingPosts = true;
+    notifyListeners();
+
+    try {
+      final raw = await _groupService.getPendingPosts(groupId);
+      _pendingPosts = raw.map((p) => Post.fromJson(p as Map<String, dynamic>)).toList();
+    } catch (e) {
+      print('fetchPendingPosts error: $e');
+      _pendingPosts = [];
+    } finally {
+      _isLoadingPendingPosts = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, dynamic>> approveGroupPost(String groupId, String postId) async {
+    final result = await _groupService.approvePost(groupId, postId);
+    if (result['success']) {
+      _pendingPosts.removeWhere((p) => p.id == postId);
+      notifyListeners();
+      // Refresh approved posts list
+      await fetchGroupPosts(groupId, refresh: true);
+    }
+    return result;
+  }
+
+  Future<Map<String, dynamic>> rejectGroupPost(String groupId, String postId, {String? reason}) async {
+    final result = await _groupService.rejectPost(groupId, postId, reason: reason);
+    if (result['success']) {
+      _pendingPosts.removeWhere((p) => p.id == postId);
+      notifyListeners();
+    }
+    return result;
+  }
+
   void clearError() {
     _errorMessage = null;
     notifyListeners();
@@ -436,6 +550,8 @@ class GroupProvider with ChangeNotifier {
     _suggestedGroups = [];
     _currentGroup = null;
     _groupMembers = [];
+    _pendingMembers = [];
+    _pendingPosts = [];
     _currentUserRole = null;
     _groupPosts.clear();
     _errorMessage = null;

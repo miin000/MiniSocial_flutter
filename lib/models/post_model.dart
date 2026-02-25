@@ -5,6 +5,7 @@ class Post {
   final List<String>? mediaUrls;
   final String? contentType;
   final String? status;
+  final String? visibility; // 'public', 'friends', 'private'
   final int likesCount;
   final int commentsCount;
   final int sharesCount;
@@ -17,6 +18,9 @@ class Post {
   final String? userAvatar;
   final bool? isLiked;
   final String? groupId;
+  final String? approvedBy;
+  final DateTime? approvedAt;
+  final String? rejectedReason;
 
   Post({
     this.id,
@@ -25,6 +29,7 @@ class Post {
     this.mediaUrls,
     this.contentType,
     this.status,
+    this.visibility = 'public',
     this.likesCount = 0,
     this.commentsCount = 0,
     this.sharesCount = 0,
@@ -35,7 +40,12 @@ class Post {
     this.userAvatar,
     this.isLiked = false,
     this.groupId,
+    this.approvedBy,
+    this.approvedAt,
+    this.rejectedReason,
   });
+
+  bool get isGroupPost => groupId != null && groupId!.isNotEmpty;
 
   factory Post.fromJson(Map<String, dynamic> json) {
     return Post(
@@ -47,6 +57,7 @@ class Post {
           : null,
       contentType: json['content_type'] as String?,
       status: json['status'] as String?,
+      visibility: json['visibility'] as String? ?? 'public',
       likesCount: json['likes_count'] as int? ?? 0,
       commentsCount: json['comments_count'] as int? ?? 0,
       sharesCount: json['shares_count'] as int? ?? 0,
@@ -61,6 +72,11 @@ class Post {
       userAvatar: json['user_avatar'] as String?,
       isLiked: json['is_liked'] as bool? ?? false,
       groupId: json['group_id']?.toString() ?? json['groupId']?.toString(),
+      approvedBy: json['approved_by'] as String?,
+      approvedAt: json['approved_at'] != null 
+          ? DateTime.parse(json['approved_at']) 
+          : null,
+      rejectedReason: json['rejected_reason'] as String?,
     );
   }
 
@@ -72,12 +88,13 @@ class Post {
       if (mediaUrls != null) 'media_urls': mediaUrls,
       if (contentType != null) 'content_type': contentType,
       if (status != null) 'status': status,
+      'visibility': visibility,
       'likes_count': likesCount,
       'comments_count': commentsCount,
       'shares_count': sharesCount,
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
-        if (groupId != null) 'group_id': groupId,
+      if (groupId != null) 'group_id': groupId,
     };
   }
 
@@ -88,6 +105,7 @@ class Post {
     List<String>? mediaUrls,
     String? contentType,
     String? status,
+    String? visibility,
     int? likesCount,
     int? commentsCount,
     int? sharesCount,
@@ -105,6 +123,7 @@ class Post {
       mediaUrls: mediaUrls ?? this.mediaUrls,
       contentType: contentType ?? this.contentType,
       status: status ?? this.status,
+      visibility: visibility ?? this.visibility,
       likesCount: likesCount ?? this.likesCount,
       commentsCount: commentsCount ?? this.commentsCount,
       sharesCount: sharesCount ?? this.sharesCount,
