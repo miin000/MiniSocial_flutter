@@ -16,27 +16,45 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final ScrollController _scrollController = ScrollController();
-  bool _isReloading = false;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserPosts(refresh: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reloadProfile();
+    });
     _scrollController.addListener(_onScroll);
   }
 
-  void _loadUserPosts({bool refresh = true}) {
+  Future<void> _reloadProfile() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final postProvider = Provider.of<PostProvider>(context, listen: false);
-    final userId = authProvider.user?.id;
 
-    if (userId == null) {
-      print('DEBUG: Không có userId, không load posts');
-      return;
+    setState(() => _isLoading = true);
+
+    try {
+      await authProvider.checkAuthStatus();
+      print('DEBUG Profile: Reload user thành công - bio: ${authProvider.user?.bio}, job: ${authProvider.user?.job}, location: ${authProvider.user?.location}');
+
+      // Load bài viết của chính mình
+      final currentUserId = authProvider.user?.id;
+      if (currentUserId != null) {
+        await postProvider.loadPosts(refresh: true, userId: currentUserId);
+
+        final myPosts = postProvider.posts.where((post) => post.userId == currentUserId).toList();
+        postProvider.setPostsForProfile(myPosts);
+
+        print('DEBUG Profile: Sau lọc còn ${myPosts.length} bài của chính mình');
+      }
+    } catch (e) {
+      print('ERROR Profile reload: $e');
+      Fluttertoast.showToast(msg: 'Lỗi tải hồ sơ', backgroundColor: Colors.red);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-
-    print('DEBUG: Load posts cho userId: $userId, refresh: $refresh');
-    postProvider.loadPosts(refresh: refresh, userId: userId);
   }
 
   void _onScroll() {
@@ -44,7 +62,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_scrollController.position.extentAfter < 300 &&
         !postProvider.isLoading &&
         postProvider.hasMore) {
-      _loadUserPosts(refresh: false);
+      _reloadProfile(); // Reload khi scroll xuống cuối (infinite scroll cho my posts)
     }
   }
 
@@ -60,7 +78,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final postsCount = postProvider.posts.length;
     final likesCount = postProvider.posts.fold<int>(0, (sum, post) => sum + post.likesCount);
-
     final friendsCount = 0;
 
     return Scaffold(
@@ -82,16 +99,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await authProvider.checkAuthStatus();
-          _loadUserPosts(refresh: true);
-        },
+        onRefresh: _reloadProfile,
         child: NestedScrollView(
           controller: _scrollController,
           headerSliverBuilder: (context, innerBoxIsScrolled) => [
             SliverToBoxAdapter(
               child: Column(
                 children: [
+                  // Ảnh bìa
                   if (user.cover != null && user.cover!.isNotEmpty)
                     Container(
                       height: 200,
@@ -111,34 +126,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         CircleAvatar(
                           radius: 60,
                           backgroundImage: user.avatar != null ? NetworkImage(user.avatar!) : null,
-                          child: user.avatar == null ? Text(user.fullName?[0] ?? 'U') : null,
+                          child: user.avatar == null
+                              ? Text(
+                            user.fullName?[0] ?? user.username?[0] ?? 'U',
+                            style: const TextStyle(fontSize: 48, color: Colors.white),
+                          )
+                              : null,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
+
                         Text(
                           user.fullName ?? user.username ?? 'Người dùng',
                           style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                         ),
-                        if (user.bio != null && user.bio!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
+
+                        // Bio
+                        const SizedBox(height: 8),
+                        if (user.bio != null && user.bio!.isNotEmpty)
                           Text(
                             user.bio!,
-                            style: const TextStyle(fontSize: 14, color: Colors.grey),
+                            style: const TextStyle(fontSize: 14, color: Colors.black87),
                             textAlign: TextAlign.center,
+                          )
+                        else
+                          const Text(
+                            'Chưa có tiểu sử',
+                            style: TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic),
                           ),
-                        ],
+
                         const SizedBox(height: 16),
 
+                        // Job & Location
                         if (user.job != null && user.job!.isNotEmpty)
-                          _buildInfoRow(Icons.work, user.job!),
+                          _buildInfoRow(Icons.work_outline, user.job!)
+                        else
+                          _buildInfoRow(Icons.work_outline, 'Chưa có công việc'),
+
                         if (user.location != null && user.location!.isNotEmpty)
-                          _buildInfoRow(Icons.location_on, user.location!),
+                          _buildInfoRow(Icons.location_on_outlined, user.location!)
+                        else
+                          _buildInfoRow(Icons.location_on_outlined, 'Chưa có vị trí'),
+
                         if (user.createdAt != null)
                           _buildInfoRow(
-                            Icons.calendar_today,
-                            'Tham gia tháng ${user.createdAt!.month} năm ${user.createdAt!.year}',
+                            Icons.calendar_today_outlined,
+                            'Tham gia ${user.createdAt!.month}/${user.createdAt!.year}',
                           ),
 
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 24),
 
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -149,59 +184,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
 
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 24),
 
                         SizedBox(
                           width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isReloading
-                                ? null
-                                : () async {
-                              final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.edit, size: 18),
+                            label: const Text('Chỉnh sửa hồ sơ'),
+                            onPressed: () async {
                               final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(builder: (_) => const EditProfileScreen()),
                               );
 
                               if (result == true && mounted) {
-                                setState(() => _isReloading = true);
-                                try {
-                                  await authProvider.checkAuthStatus();
+                                print('DEBUG Profile: Reload sau khi chỉnh sửa');
+                                final auth = Provider.of<AuthProvider>(context, listen: false);
 
-                                  _loadUserPosts(refresh: true);
+                                // Reload user từ local + API
+                                await auth.checkAuthStatus();
 
-                                  Fluttertoast.showToast(
-                                    msg: 'Đã cập nhật hồ sơ!',
-                                    backgroundColor: Colors.green,
-                                  );
-                                } catch (e) {
-                                  Fluttertoast.showToast(
-                                    msg: 'Lỗi reload hồ sơ: $e',
-                                    backgroundColor: Colors.red,
-                                  );
-                                } finally {
-                                  if (mounted) setState(() => _isReloading = false);
-                                }
+                                // Reload posts của mình
+                                await _reloadProfile();
+
+                                // Force rebuild UI
+                                setState(() {});
+
+                                Fluttertoast.showToast(msg: 'Đã cập nhật hồ sơ!', backgroundColor: Colors.green);
                               }
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF1877F2),
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              // Disable button khi đang reload
-                              elevation: _isReloading ? 0 : 2,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            child: _isReloading
-                                ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                                : const Text('Chỉnh sửa hồ sơ'),
                           ),
                         ),
                       ],
@@ -211,10 +228,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ],
-          body: postProvider.isLoading && postProvider.posts.isEmpty
+          body: _isLoading && postProvider.posts.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : postProvider.posts.isEmpty
-              ? const Center(child: Text('Bạn chưa có bài viết nào'))
+              ? Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.article_outlined, size: 80, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                const Text(
+                  'Bạn chưa có bài viết nào',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.grey),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Hãy tạo bài viết đầu tiên!',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+              ],
+            ),
+          )
               : ListView.builder(
             itemCount: postProvider.posts.length,
             itemBuilder: (context, index) => PostCard(post: postProvider.posts[index]),
@@ -224,18 +258,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Giữ nguyên 2 hàm _buildInfoRow và _buildStatColumn như cũ
   Widget _buildInfoRow(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Icon(icon, color: Colors.grey),
-          const SizedBox(width: 8),
+          Icon(icon, color: Colors.blueGrey, size: 20),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              style: const TextStyle(fontSize: 15, color: Colors.black87),
             ),
           ),
         ],
@@ -246,9 +279,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildStatColumn(String number, String label) {
     return Column(
       children: [
-        Text(number, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(
+          number,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 }

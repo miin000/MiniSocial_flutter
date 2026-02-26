@@ -125,12 +125,92 @@ class AuthService {
 
   Future<Map<String, dynamic>> updateProfile(UserModel user) async {
     try {
-      final response = await _apiService.put('/users/${user.id}', data: user.toJson());
-      return {'success': true, 'user': UserModel.fromJson(response.data)};
+      print('DEBUG: === BẮT ĐẦU UPDATE PROFILE ===');
+      print('DEBUG: Data gửi: ${user.toJson()}');
+
+      Response? response;
+      String? successEndpoint;
+      String? successMethod;
+
+      // Danh sách endpoint + method cần thử (thêm nhiều hơn để bao quát)
+      final attempts = [
+        {'path': '/users/${user.id}', 'method': 'put'},
+        {'path': '/users/${user.id}', 'method': 'patch'},
+        {'path': '/profile', 'method': 'put'},
+        {'path': '/profile', 'method': 'patch'},
+        {'path': '/users/me', 'method': 'put'},
+        {'path': '/users/me', 'method': 'patch'},
+        {'path': '/users/update', 'method': 'put'},
+        {'path': '/users/update', 'method': 'patch'},
+        {'path': '/auth/profile', 'method': 'put'},
+        {'path': '/auth/profile', 'method': 'patch'},
+        {'path': '/profile/update', 'method': 'put'},
+        {'path': '/profile/update', 'method': 'patch'},
+      ];
+
+      for (final attempt in attempts) {
+        final path = attempt['path']!;
+        final method = attempt['method']!;
+
+        try {
+          print('DEBUG: Thử $method $path ...');
+
+          if (method == 'put') {
+            response = await _apiService.put(path, data: user.toJson());
+          } else if (method == 'patch') {
+            response = await _apiService.patch(path, data: user.toJson());
+          }
+
+          successEndpoint = path;
+          successMethod = method;
+          print('DEBUG: THÀNH CÔNG! $method $path - status: ${response?.statusCode}');
+          print('DEBUG: Response data: ${response?.data}');
+          break; // Dừng khi thành công
+        } catch (e) {
+          print('DEBUG: Thất bại $method $path: $e');
+        }
+      }
+
+      if (successEndpoint == null) {
+        throw Exception('Không tìm thấy endpoint update profile nào hoạt động');
+      }
+
+      final updatedUser = UserModel.fromJson(response!.data);
+      print('DEBUG: Update thành công qua $successMethod $successEndpoint');
+
+      return {'success': true, 'user': updatedUser};
     } on DioException catch (e) {
-      return {'success': false, 'message': e.response?.data['message'] ?? 'Lỗi cập nhật profile'};
+      final status = e.response?.statusCode;
+      final message = e.response?.data?['message'] ?? 'Lỗi server';
+      print('ERROR updateProfile: $status - $message');
+      print('ERROR full response: ${e.response?.data}');
+      return {'success': false, 'message': message};
     } catch (e) {
-      return {'success': false, 'message': e.toString()};
+      print('ERROR updateProfile general: $e');
+      return {'success': false, 'message': 'Lỗi: $e'};
+    }
+  }
+
+  // Đổi mật khẩu
+  Future<Map<String, dynamic>> changePassword(String oldPassword, String newPassword) async {
+    try {
+      // Ensure token loaded into ApiService so request contains Authorization header
+      await _apiService.loadToken();
+      final response = await _apiService.post('/users/change-password', data: {
+        'old_password': oldPassword,
+        'new_password': newPassword,
+      });
+
+      // Nếu backend trả ok (200)
+      return {'success': true, 'message': 'Đổi mật khẩu thành công'};
+    } on DioException catch (e) {
+      String message = 'Đổi mật khẩu thất bại';
+      if (e.response?.data != null && e.response?.data['message'] != null) {
+        message = e.response?.data['message'];
+      }
+      return {'success': false, 'message': message};
+    } catch (e) {
+      return {'success': false, 'message': 'Đã xảy ra lỗi: $e'};
     }
   }
 }

@@ -10,22 +10,29 @@ class PostService {
   PostService(this._dio);
 
   // Posts
-  Future<Map<String, dynamic>> getPosts({int page = 1, int limit = 20, String? userId, String? groupId}) async {
+  Future<Map<String, dynamic>> getPosts({
+    int page = 1,
+    int limit = 20,
+    String? userId,
+    bool onlyMyPosts = false,   // <-- Thêm flag
+  }) async {
     try {
+      final query = {
+        'page': page,
+        'limit': limit,
+        if (onlyMyPosts) 'my_posts': 'true',
+        if (userId != null && !onlyMyPosts) 'user_id': userId,
+      };
+
       final response = await _dio.get(
         '$baseUrl/posts',
-        queryParameters: {
-          'page': page,
-          'limit': limit,
-          if (userId != null) 'user_id': userId,
-          if (groupId != null) 'group_id': groupId,
-        },
+        queryParameters: query,
       );
 
       final posts = (response.data['posts'] as List)
           .map((post) => Post.fromJson(post))
           .toList();
-      
+
       return {
         'posts': posts,
         'total': response.data['total'],

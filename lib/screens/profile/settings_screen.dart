@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/post_provider.dart';
 import 'edit_profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -51,18 +52,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isChangingPassword = true);
 
     try {
-      // TODO: Gọi API đổi mật khẩu thực tế (thêm sau khi backend hỗ trợ)
-      // final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      // final res = await authProvider.changePassword(oldPass, newPass);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-      // Giả lập thành công
-      await Future.delayed(const Duration(seconds: 1));
+      final res = await authProvider.changePassword(oldPass, newPass);
 
-      Fluttertoast.showToast(msg: 'Đổi mật khẩu thành công!', backgroundColor: Colors.green);
-
-      _oldPasswordController.clear();
-      _newPasswordController.clear();
-      _confirmPasswordController.clear();
+      if (res['success']) {
+        Fluttertoast.showToast(msg: 'Đổi mật khẩu thành công!', backgroundColor: Colors.green);
+        _oldPasswordController.clear();
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
+      } else {
+        Fluttertoast.showToast(msg: res['message'] ?? 'Đổi mật khẩu thất bại', backgroundColor: Colors.red);
+      }
     } catch (e) {
       Fluttertoast.showToast(msg: 'Lỗi đổi mật khẩu: $e', backgroundColor: Colors.red);
     } finally {

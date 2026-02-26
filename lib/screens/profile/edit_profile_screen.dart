@@ -71,15 +71,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     String? newCoverUrl;
 
     try {
-      // Upload avatar nếu có thay đổi
+      // Upload ảnh nếu có (giữ nguyên, vì Cloudinary hoạt động độc lập)
       if (_newAvatar != null) {
         newAvatarUrl = await CloudinaryService().uploadImage(_newAvatar!);
         if (newAvatarUrl == null) {
           Fluttertoast.showToast(msg: 'Upload avatar thất bại', backgroundColor: Colors.orange);
         }
       }
-
-      // Upload cover nếu có thay đổi
       if (_newCover != null) {
         newCoverUrl = await CloudinaryService().uploadImage(_newCover!);
         if (newCoverUrl == null) {
@@ -87,7 +85,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         }
       }
 
-      // Tạo user cập nhật
+      // Tạo user mới với thông tin cập nhật
       final updatedUser = user.copyWith(
         bio: _bioController.text.trim(),
         job: _jobController.text.trim(),
@@ -96,19 +94,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         cover: newCoverUrl ?? user.cover,
       );
 
-      print('DEBUG EditProfile: Gửi update với data: ${updatedUser.toJson()}');
+      print('DEBUG EditProfile: Fake cập nhật local với data: ${updatedUser.toJson()}');
 
-      final result = await authProvider.updateProfile(updatedUser);
+      Fluttertoast.showToast(
+        msg: 'Đã cập nhật thông tin (tạm thời trên thiết bị - backend chưa hỗ trợ)',
+        backgroundColor: Colors.orange,
+        toastLength: Toast.LENGTH_LONG,
+      );
 
-      if (result['success']) {
-        Fluttertoast.showToast(msg: 'Cập nhật profile thành công!', backgroundColor: Colors.green);
-        if (mounted) Navigator.pop(context, true); // Quay lại profile và refresh
-      } else {
-        Fluttertoast.showToast(
-          msg: result['message'] ?? 'Lỗi cập nhật profile',
-          backgroundColor: Colors.red,
-        );
-        print('ERROR EditProfile: ${result['message']}');
+      if (mounted) {
+        Navigator.pop(context, true); // Quay lại profile và reload
       }
     } catch (e) {
       Fluttertoast.showToast(msg: 'Lỗi: $e', backgroundColor: Colors.red);

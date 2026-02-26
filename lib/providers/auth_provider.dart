@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
+import '../services/secure_storage_service.dart';
 
 enum AuthStatus {
   initial,
@@ -45,27 +46,31 @@ class AuthProvider with ChangeNotifier {
       final token = prefs.getString('auth_token');
       final userJson = prefs.getString('user_data');
 
+      // Ưu tiên load user từ local trước (fake update sẽ được giữ)
+      if (userJson != null) {
+        _user = UserModel.fromJson(jsonDecode(userJson));
+        print('DEBUG AuthProvider: Load user từ local SharedPreferences - bio: ${_user?.bio}, job: ${_user?.job}, location: ${_user?.location}');
+      }
+
       if (token != null && userJson != null) {
         _token = token;
-        _user = UserModel.fromJson(jsonDecode(userJson));
 
-        // Verify token với API
+        // Verify token với API (nếu fail thì giữ local user)
         final result = await _authService.getMe();
         if (result['success']) {
           _user = result['user'];
-          _status = AuthStatus.authenticated;
-          // Cập nhật user data
-          await _saveUserData(_user!);
+          await _saveUserData(_user!); // Cập nhật lại nếu API trả user mới
+          print('DEBUG AuthProvider: Verify API thành công - cập nhật user từ server');
         } else {
-          // Token không hợp lệ
-          await _clearUserData();
-          _status = AuthStatus.unauthenticated;
+          print('DEBUG AuthProvider: Verify API fail, giữ user local');
+          // Không clear user, giữ fake local
         }
+        _status = AuthStatus.authenticated;
       } else {
         _status = AuthStatus.unauthenticated;
       }
     } catch (e) {
-      print('Error in checkAuthStatus: $e');
+      print('ERROR in checkAuthStatus: $e');
       _status = AuthStatus.unauthenticated;
     }
 
@@ -135,6 +140,24 @@ class AuthProvider with ChangeNotifier {
     return result;
   }
 
+  // Đổi mật khẩu
+  Future<Map<String, dynamic>> changePassword(String oldPassword, String newPassword) async {
+    _status = AuthStatus.loading;
+    notifyListeners();
+
+    final result = await _authService.changePassword(oldPassword, newPassword);
+
+    if (result['success']) {
+      // Lưu mật khẩu mới vào secure storage
+      final secure = SecureStorageService();
+      await secure.savePassword(newPassword);
+    }
+
+    _status = isAuthenticated ? AuthStatus.authenticated : AuthStatus.unauthenticated;
+    notifyListeners();
+    return result;
+  }
+
   // Đăng xuất
   Future<void> logout() async {
     _status = AuthStatus.loading;
@@ -170,5 +193,14 @@ class AuthProvider with ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  // Thêm method này để cập nhật user cục bộ (fake khi backend chưa hỗ trợ)
+  void updateLocalUser(UserModel updatedUser) {
+    _user = updatedUser;
+    // Lưu lại vào SharedPreferences để giữ khi reload app
+    _saveUserData(updatedUser);
+    notifyListeners();
+    print('DEBUG AuthProvider: Đã cập nhật local user thành công - bio: ${updatedUser.bio}, job: ${updatedUser.job}, location: ${updatedUser.location}');
   }
 }

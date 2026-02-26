@@ -19,7 +19,11 @@ class PostProvider with ChangeNotifier {
   bool get hasMore => _hasMore;
 
   // Load posts
-  Future<void> loadPosts({bool refresh = false, String? userId}) async {
+  Future<void> loadPosts({
+    bool refresh = false,
+    String? userId,           // userId của người đăng bài (nếu muốn lấy bài của người khác)
+    bool onlyMyPosts = false, // <-- Thêm tham số mới: true = chỉ lấy bài của user đang đăng nhập
+  }) async {
     if (refresh) {
       _currentPage = 1;
       _hasMore = true;
@@ -28,16 +32,35 @@ class PostProvider with ChangeNotifier {
 
     if (_isLoading || !_hasMore) return;
 
+    try {
+      await ApiService().loadToken();
+      if (!ApiService().hasToken) {
+        _isLoading = false;
+        _error = 'Not authenticated';
+        notifyListeners();
+        return;
+      }
+    } catch (_) {
+      _isLoading = false;
+      _error = 'Not authenticated';
+      notifyListeners();
+      return;
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
+      // Nếu onlyMyPosts = true → gọi endpoint lấy bài của chính user đăng nhập
+      // Nếu không → gọi endpoint feed chung (có thể lọc theo userId nếu cần)
       final result = await _postService.getPosts(
         page: _currentPage,
         limit: 20,
-        userId: userId,
+        userId: onlyMyPosts ? null : userId,           // nếu onlyMyPosts thì backend sẽ tự hiểu lấy của user hiện tại
+        onlyMyPosts: onlyMyPosts,                      // truyền thêm flag này xuống service
       );
+
       final List<Post> newPosts = result['posts'] as List<Post>;
 
       if (refresh) {
@@ -54,6 +77,16 @@ class PostProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  // Clear posts and reset paging (useful on logout)
+  void clearAll() {
+    _posts = [];
+    _isLoading = false;
+    _error = null;
+    _currentPage = 1;
+    _hasMore = true;
+    notifyListeners();
   }
 
   // Create post
@@ -214,6 +247,12 @@ class PostProvider with ChangeNotifier {
 
   void clearError() {
     _error = null;
+    notifyListeners();
+  }
+
+  // Thêm vào class PostProvider
+  void setPostsForProfile(List<Post> myPosts) {
+    _posts = myPosts;
     notifyListeners();
   }
 }
