@@ -79,6 +79,7 @@ class _PostCardState extends State<PostCard> {
                   reporterId: authProvider.user!.id!,
                   reportedPostId: widget.post.id!,
                   reason: selectedReason!,
+                  groupId: widget.post.groupId,
                 );
 
                 if (mounted) {

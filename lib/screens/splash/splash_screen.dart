@@ -59,7 +59,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     // Navigate dựa trên trạng thái auth
     if (authProvider.isAuthenticated) {
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.pushReplacementNamed(context, '/main');
     } else {
       Navigator.pushReplacementNamed(context, '/login');
     }

@@ -65,6 +65,7 @@ class GroupModel {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final List<GroupPostModel> posts;
+  final String? userRole; // Role from API (ADMIN/MODERATOR/MEMBER)
 
   GroupModel({
     required this.id,
@@ -81,6 +82,7 @@ class GroupModel {
     this.createdAt,
     this.updatedAt,
     this.posts = const [],
+    this.userRole,
   });
 
   // ================= FIX CHUẨN OWNER =================
@@ -127,9 +129,10 @@ class GroupModel {
       memberCount: json['members_count'] ??
           json['memberCount'] ??
           membersJson.length,
-      isJoined: true,
+      isJoined: json['userRole'] != null || membersJson.isNotEmpty,
       requirePostApproval: json['require_post_approval'] == true,
       requireMemberApproval: json['require_member_approval'] != false, // default true
+      userRole: json['userRole']?.toString(),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'])
           : null,
@@ -167,6 +170,7 @@ class GroupModel {
     DateTime? createdAt,
     DateTime? updatedAt,
     List<GroupPostModel>? posts,
+    String? userRole,
   }) {
     return GroupModel(
       id: id ?? this.id,
@@ -183,6 +187,7 @@ class GroupModel {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       posts: posts ?? this.posts,
+      userRole: userRole ?? this.userRole,
     );
   }
 
@@ -207,6 +212,18 @@ class GroupModel {
         if (role == 'ADMIN') return MemberRole.owner;
         if (role == 'MODERATOR') return MemberRole.admin;
         return MemberRole.member;
+      }
+    }
+
+    // 🔥 Fallback: use userRole from API response (attached by getGroupsForUser)
+    if (userRole != null) {
+      switch (userRole!.toUpperCase()) {
+        case 'ADMIN':
+          return MemberRole.owner;
+        case 'MODERATOR':
+          return MemberRole.admin;
+        case 'MEMBER':
+          return MemberRole.member;
       }
     }
 

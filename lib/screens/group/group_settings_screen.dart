@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../providers/group_provider.dart';
 import '../../models/group_model.dart';
+import '../../models/group_post_model.dart';
 
 class GroupSettingsScreen extends StatefulWidget {
   final GroupModel group;
@@ -47,7 +48,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
     _descController = TextEditingController(text: widget.group.description);
     _requireMemberApproval = widget.group.requireMemberApproval;
     _requirePostApproval   = widget.group.requirePostApproval;
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final gp = Provider.of<GroupProvider>(context, listen: false);
@@ -111,7 +112,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
     final group = widget.group;
     final userId = widget.currentUserId;
 
-    if (!group.isOwner(userId) && !groupProvider.isCurrentUserAdmin) {
+    if (!group.isOwner(userId) && !groupProvider.isCurrentUserAdmin && !groupProvider.isCurrentUserModerator) {
       return Scaffold(
         backgroundColor: _white,
         appBar: AppBar(
@@ -171,11 +172,12 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
           tabs: [
             const Tab(text: 'Thông tin'),
             const Tab(text: 'Cài đặt'),
+            const Tab(text: 'Duyệt bài'),
             Tab(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Yêu cầu'),
+                  const Text('Thành viên'),
                   if (pendingCount > 0) ...[
                     const SizedBox(width: 6),
                     Container(
@@ -196,6 +198,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
         children: [
           _buildInfoTab(groupProvider, group),
           _buildSettingsTab(),
+          _buildPendingPostsTab(groupProvider),
           _buildPendingTab(groupProvider),
         ],
       ),
@@ -427,7 +430,15 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
     );
   }
 
-  // ─── Tab 3: Yêu cầu tham gia ────────────────────────────────────
+  // ─── Tab 3: Duyệt bài viết ───────────────────────────────────────
+  Widget _buildPendingPostsTab(GroupProvider gp) {
+    return _PendingPostsTabContent(
+      group: widget.group,
+      currentUserId: widget.currentUserId,
+    );
+  }
+
+  // ─── Tab 4: Yêu cầu tham gia ────────────────────────────────────
   Widget _buildPendingTab(GroupProvider gp) {
     final pending = gp.pendingMembers;
 
@@ -739,4 +750,274 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
 
   Widget _divider() => const Divider(
       height: 1, thickness: 1, color: Color(0xFFF1F5F9), indent: 62, endIndent: 0);
+}
+
+// ─── Pending Posts Tab Content ─────────────────────────────────────
+
+class _PendingPostsTabContent extends StatefulWidget {
+  final GroupModel group;
+  final String currentUserId;
+
+  const _PendingPostsTabContent({required this.group, required this.currentUserId});
+
+  @override
+  State<_PendingPostsTabContent> createState() => _PendingPostsTabContentState();
+}
+
+class _PendingPostsTabContentState extends State<_PendingPostsTabContent> {
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPendingPosts();
+    });
+  }
+
+  Future<void> _loadPendingPosts() async {
+    final gp = Provider.of<GroupProvider>(context, listen: false);
+    await gp.fetchPendingPosts(widget.group.id);
+    if (mounted) setState(() => _loaded = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<GroupProvider>(
+      builder: (context, gp, child) {
+        if (gp.isLoadingPendingPosts && !_loaded) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Đang tải bài viết chờ duyệt...'),
+              ],
+            ),
+          );
+        }
+
+        final pendingPosts = gp.pendingPosts;
+
+        if (pendingPosts.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(Icons.check_circle_outline, size: 34, color: Colors.green[400]),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Không có bài viết chờ duyệt',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF1e293b)),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Tất cả bài viết đã được xử lý',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF64748b)),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: _loadPendingPosts,
+          child: ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: pendingPosts.length,
+            itemBuilder: (context, index) {
+              final post = pendingPosts[index];
+              return _PendingPostCard(
+                post: post,
+                groupId: widget.group.id,
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PendingPostCard extends StatelessWidget {
+  final dynamic post;
+  final String groupId;
+
+  const _PendingPostCard({required this.post, required this.groupId});
+
+  @override
+  Widget build(BuildContext context) {
+    final String content = post.content ?? '';
+    final String authorName = post.userName ?? post.userId ?? 'Người dùng';
+    final String? authorAvatar = post.userAvatar;
+    final DateTime? createdAt = post.createdAt;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: authorAvatar != null && authorAvatar.isNotEmpty
+                      ? NetworkImage(authorAvatar)
+                      : null,
+                  child: authorAvatar == null || authorAvatar.isEmpty
+                      ? Text(authorName.isNotEmpty ? authorName[0].toUpperCase() : 'U')
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(authorName,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      if (createdAt != null)
+                        Text(_formatDate(createdAt),
+                            style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text('Chờ duyệt',
+                      style: TextStyle(
+                          color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(content, style: const TextStyle(fontSize: 15)),
+            if (post.mediaUrls != null && (post.mediaUrls as List).isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  (post.mediaUrls as List).first.toString(),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: 200,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ],
+            const Divider(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.check, color: Colors.white, size: 20),
+                    label: const Text('Duyệt'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () async {
+                      final gp = Provider.of<GroupProvider>(context, listen: false);
+                      final res = await gp.approveGroupPost(groupId, post.id!);
+                      Fluttertoast.showToast(
+                        msg: res['success']
+                            ? 'Đã duyệt bài viết!'
+                            : (res['message'] ?? 'Lỗi'),
+                        backgroundColor: res['success'] ? Colors.green : Colors.red,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                    label: const Text('Từ chối', style: TextStyle(color: Colors.red)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () => _showRejectDialog(context),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRejectDialog(BuildContext context) {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Từ chối bài viết'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Nhập lý do từ chối (không bắt buộc):'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Lý do...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(context);
+              final gp = Provider.of<GroupProvider>(context, listen: false);
+              final reason = reasonController.text.trim().isEmpty
+                  ? null
+                  : reasonController.text.trim();
+              final res =
+                  await gp.rejectGroupPost(groupId, post.id!, reason: reason);
+              Fluttertoast.showToast(
+                msg: res['success']
+                    ? 'Đã từ chối bài viết!'
+                    : (res['message'] ?? 'Lỗi'),
+                backgroundColor: res['success'] ? Colors.green : Colors.red,
+              );
+            },
+            child: const Text('Từ chối'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inMinutes < 60) return '${diff.inMinutes} phút trước';
+    if (diff.inHours < 24) return '${diff.inHours} giờ trước';
+    return '${date.day}/${date.month}/${date.year}';
+  }
 }

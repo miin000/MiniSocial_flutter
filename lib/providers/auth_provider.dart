@@ -59,11 +59,11 @@ class AuthProvider with ChangeNotifier {
         final result = await _authService.getMe();
         if (result['success']) {
           _user = result['user'];
-          await _saveUserData(_user!); // Cập nhật lại nếu API trả user mới
-          print('DEBUG AuthProvider: Verify API thành công - cập nhật user từ server');
+          await _saveUserData(_user!);
+          // Sign in Firebase Auth cho Firestore rules
+          await _authService.signInFirebase();
         } else {
           print('DEBUG AuthProvider: Verify API fail, giữ user local');
-          // Không clear user, giữ fake local
         }
         _status = AuthStatus.authenticated;
       } else {
@@ -92,6 +92,9 @@ class AuthProvider with ChangeNotifier {
 
       // Lưu user data
       await _saveUserData(_user!);
+
+      // Sign in Firebase Auth cho Firestore rules
+      await _authService.signInFirebase();
 
       notifyListeners();
       return true;

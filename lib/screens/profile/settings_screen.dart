@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../providers/post_provider.dart';
 import 'edit_profile_screen.dart';
 
@@ -89,6 +90,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Navigator.pop(context); // Đóng dialog
 
               try {
+                // Stop Firestore notification listener
+                Provider.of<NotificationProvider>(context, listen: false)
+                    .stopListening();
                 await authProvider.logout(); // Gọi hàm logout trong AuthProvider (clear token, reset user)
 
                 Fluttertoast.showToast(

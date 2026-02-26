@@ -1,6 +1,9 @@
 // lib/services/auth_service.dart
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../config/firebase_config.dart' show isFirebaseInitialized;
 import 'api_service.dart';
 import '../models/user_model.dart';
 
@@ -114,6 +117,7 @@ class AuthService {
 
   // Đăng xuất
   Future<void> logout() async {
+    await signOutFirebase();
     await _apiService.removeToken();
   }
 
@@ -123,62 +127,47 @@ class AuthService {
     return _apiService.hasToken;
   }
 
+  // Lấy Firebase Custom Token từ backend và sign in Firebase Auth
+  // Để Firestore security rules hoạt động (xác thực user_id)
+  Future<void> signInFirebase() async {
+    if (!isFirebaseInitialized) return;
+    try {
+      final response = await _apiService.get('/auth/firebase-token');
+      final firebaseToken = response.data['firebaseToken'];
+      if (firebaseToken != null) {
+        await FirebaseAuth.instance.signInWithCustomToken(firebaseToken);
+        debugPrint('Firebase Auth signed in successfully');
+      }
+    } catch (e) {
+      // Không block login nếu Firebase Auth fail
+      // Firestore listener sẽ fallback sang REST API
+      debugPrint('Firebase Auth sign-in failed: $e');
+    }
+  }
+
+  // Đăng xuất Firebase Auth
+  Future<void> signOutFirebase() async {
+    if (!isFirebaseInitialized) return;
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      debugPrint('Firebase Auth sign-out failed: $e');
+    }
+  }
+
   Future<Map<String, dynamic>> updateProfile(UserModel user) async {
     try {
-      print('DEBUG: === BẮT ĐẦU UPDATE PROFILE ===');
-      print('DEBUG: Data gửi: ${user.toJson()}');
+      // Use PATCH /users/profile (no user ID in URL) with backend field names
+      final data = <String, dynamic>{};
+      if (user.fullName != null) data['full_name'] = user.fullName;
+      if (user.bio != null) data['bio'] = user.bio;
+      if (user.job != null) data['job'] = user.job;
+      if (user.location != null) data['location'] = user.location;
+      if (user.avatar != null) data['avatar_url'] = user.avatar;
+      if (user.cover != null) data['cover_url'] = user.cover;
 
-      Response? response;
-      String? successEndpoint;
-      String? successMethod;
-
-      // Danh sách endpoint + method cần thử (thêm nhiều hơn để bao quát)
-      final attempts = [
-        {'path': '/users/${user.id}', 'method': 'put'},
-        {'path': '/users/${user.id}', 'method': 'patch'},
-        {'path': '/profile', 'method': 'put'},
-        {'path': '/profile', 'method': 'patch'},
-        {'path': '/users/me', 'method': 'put'},
-        {'path': '/users/me', 'method': 'patch'},
-        {'path': '/users/update', 'method': 'put'},
-        {'path': '/users/update', 'method': 'patch'},
-        {'path': '/auth/profile', 'method': 'put'},
-        {'path': '/auth/profile', 'method': 'patch'},
-        {'path': '/profile/update', 'method': 'put'},
-        {'path': '/profile/update', 'method': 'patch'},
-      ];
-
-      for (final attempt in attempts) {
-        final path = attempt['path']!;
-        final method = attempt['method']!;
-
-        try {
-          print('DEBUG: Thử $method $path ...');
-
-          if (method == 'put') {
-            response = await _apiService.put(path, data: user.toJson());
-          } else if (method == 'patch') {
-            response = await _apiService.patch(path, data: user.toJson());
-          }
-
-          successEndpoint = path;
-          successMethod = method;
-          print('DEBUG: THÀNH CÔNG! $method $path - status: ${response?.statusCode}');
-          print('DEBUG: Response data: ${response?.data}');
-          break; // Dừng khi thành công
-        } catch (e) {
-          print('DEBUG: Thất bại $method $path: $e');
-        }
-      }
-
-      if (successEndpoint == null) {
-        throw Exception('Không tìm thấy endpoint update profile nào hoạt động');
-      }
-
-      final updatedUser = UserModel.fromJson(response!.data);
-      print('DEBUG: Update thành công qua $successMethod $successEndpoint');
-
-      return {'success': true, 'user': updatedUser};
+      final response = await _apiService.patch('/users/profile', data: data);
+      return {'success': true, 'user': UserModel.fromJson(response.data)};
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       final message = e.response?.data?['message'] ?? 'Lỗi server';

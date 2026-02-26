@@ -175,6 +175,7 @@ class PostProvider with ChangeNotifier {
     required String reportedPostId,
     required String reason,
     String? description,
+    String? groupId,
   }) async {
     try {
       await _postService.reportPost(
@@ -182,6 +183,7 @@ class PostProvider with ChangeNotifier {
         reportedPostId: reportedPostId,
         reason: reason,
         description: description,
+        groupId: groupId,
       );
       return true;
     } catch (e) {

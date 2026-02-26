@@ -28,6 +28,22 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   bool _isLoading = true;
   bool _isJoined = false;
 
+  /// Map backend role string (from GroupMember table) to Flutter MemberRole enum
+  MemberRole _mapApiRoleToMemberRole(String? apiRole, bool isOwner) {
+    if (isOwner) return MemberRole.owner;
+    if (apiRole == null) return MemberRole.none;
+    switch (apiRole.toUpperCase()) {
+      case 'ADMIN':
+        return MemberRole.owner;
+      case 'MODERATOR':
+        return MemberRole.admin;
+      case 'MEMBER':
+        return MemberRole.member;
+      default:
+        return MemberRole.none;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -95,11 +111,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             currentUserId.isNotEmpty &&
             currentGroup.ownerId.toString() == currentUserId);
 
-    final userRole = isOwner ? MemberRole.owner : (currentGroup.getUserRole(currentUserId) ?? MemberRole.none);
+    // Use provider's currentUserRole (from API) instead of getUserRole (empty members list)
+    final userRole = _mapApiRoleToMemberRole(gp.currentUserRole, isOwner);
 
     // Admin and moderator can see the pending posts tab
     final canManagePosts = userRole == MemberRole.owner || userRole == MemberRole.admin;
-    final tabCount = canManagePosts ? 4 : 3;
+    final tabCount = 3;
 
     if (_isLoading) {
       return const Scaffold(
@@ -132,13 +149,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.notifications_none, color: Colors.black),
-              onPressed: () {},
-            ),
-            if (_isJoined)
+            if (_isJoined && canManagePosts)
               IconButton(
-                icon: const Icon(Icons.settings, color: Colors.black),
+                icon: const Icon(Icons.menu, color: Colors.black),
                 onPressed: () async {
                   final updatedGroup = await Navigator.push(
                     context,
@@ -286,8 +299,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                         const Tab(text: "Bài viết"),
                         const Tab(text: "Thành viên"),
                         const Tab(text: "Thông tin"),
-                        if (canManagePosts)
-                          const Tab(text: "Duyệt bài"),
                       ],
                     ),
                   ],
@@ -300,8 +311,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               _PostsTab(group: currentGroup, currentUserId: currentUserId),
               _MembersTab(group: currentGroup, currentUserId: currentUserId, userRole: userRole),
               _InfoTab(group: currentGroup),
-              if (canManagePosts)
-                _PendingPostsTab(group: currentGroup, currentUserId: currentUserId),
             ],
           ),
         ),

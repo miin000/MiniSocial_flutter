@@ -229,6 +229,7 @@ class PostService {
     required String reportedPostId,
     required String reason,
     String? description,
+    String? groupId,
   }) async {
     try {
       await _dio.post(
@@ -239,6 +240,7 @@ class PostService {
           'type': 'post',
           'reason': reason,
           if (description != null) 'description': description,
+          if (groupId != null) 'group_id': groupId,
         },
       );
     } catch (e) {

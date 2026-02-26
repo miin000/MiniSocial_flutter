@@ -269,7 +269,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
     final result = await groupProvider.updateGroupMemberRole(
       widget.groupId,
       memberId,
-      'admin',
+      'MODERATOR',
     );
     if (result['success']) {
       Fluttertoast.showToast(
@@ -312,7 +312,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
     final result = await groupProvider.updateGroupMemberRole(
       widget.groupId,
       memberId,
-      'member',
+      'MEMBER',
     );
     if (result['success']) {
       Fluttertoast.showToast(

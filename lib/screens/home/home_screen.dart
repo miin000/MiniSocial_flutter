@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
+import '../../providers/notification_provider.dart';
 import 'create_post_screen.dart';
 import 'post_card.dart';
 
@@ -255,6 +256,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.pop(context);
                 final authProvider =
                     Provider.of<AuthProvider>(context, listen: false);
+                // Stop Firestore notification listener
+                Provider.of<NotificationProvider>(context, listen: false)
+                    .stopListening();
                 await authProvider.logout();
 
                 Fluttertoast.showToast(

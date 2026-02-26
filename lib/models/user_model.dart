@@ -35,7 +35,7 @@ class UserModel {
       fullName: json['fullName'] ?? json['full_name'],
       rolesAdmin: json['roles_admin'] != null ? List<String>.from(json['roles_admin']) : null,
       rolesGroup: json['roles_group'] != null ? List<String>.from(json['roles_group']) : null,
-      avatar: json['avatar'],
+      avatar: json['avatar'] ?? json['avatar_url'],
       cover: json['cover'] ?? json['cover_url'],  // ← THÊM
       bio: json['bio'],
       job: json['job'],
