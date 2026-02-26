@@ -55,7 +55,6 @@ class NotificationProvider extends ChangeNotifier {
     _firestoreSubscription = FirebaseFirestore.instance
         .collection('notifications')
         .where('user_id', isEqualTo: userId)
-        .orderBy('created_at', descending: true)
         .limit(100)
         .snapshots()
         .listen(
@@ -77,7 +76,8 @@ class NotificationProvider extends ChangeNotifier {
                 ? (data['created_at'] as Timestamp).toDate()
                 : DateTime.now(),
           );
-        }).toList();
+        }).toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         _unreadCount = _notifications.where((n) => !n.isRead).length;
         _isLoading = false;
