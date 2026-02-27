@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:fluttertoast/fluttertoast.dart';
 
 import '../../models/group_model.dart';
@@ -27,7 +27,7 @@ class CreatePostInGroupScreen extends StatefulWidget {
 
 class _CreatePostInGroupScreenState extends State<CreatePostInGroupScreen> {
   final TextEditingController _contentController = TextEditingController();
-  final List<File> _selectedImages = [];
+  final List<XFile> _selectedImages = [];
   final CloudinaryService _cloudinaryService = CloudinaryService();
   bool _isUploading = false;
   final ImagePicker _picker = ImagePicker();
@@ -40,15 +40,24 @@ class _CreatePostInGroupScreenState extends State<CreatePostInGroupScreen> {
 
   Future<void> _pickImages() async {
     try {
-      final List<XFile> images = await _picker.pickMultiImage();
-      if (images.isNotEmpty && images.length <= 5) {
-        setState(() {
-          _selectedImages.addAll(images.map((e) => File(e.path)));
-        });
-      } else if (images.length > 5) {
+      final List<XFile> images = await _picker.pickMultiImage(imageQuality: 85);
+      if (images.isEmpty) return;
+      final remaining = 5 - _selectedImages.length;
+      if (remaining <= 0) {
         Fluttertoast.showToast(
-          msg: 'Chỉ được chọn tối đa 5 ảnh',
-          backgroundColor: Colors.red,
+          msg: 'Đã đạt giới hạn 5 ảnh',
+          backgroundColor: Colors.orange,
+        );
+        return;
+      }
+      final toAdd = images.take(remaining).toList();
+      setState(() {
+        _selectedImages.addAll(toAdd);
+      });
+      if (images.length > remaining) {
+        Fluttertoast.showToast(
+          msg: 'Chỉ thêm được $remaining ảnh (giới hạn 5)',
+          backgroundColor: Colors.orange,
         );
       }
     } catch (e) {
@@ -61,10 +70,10 @@ class _CreatePostInGroupScreenState extends State<CreatePostInGroupScreen> {
 
   Future<void> _pickCamera() async {
     try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+      final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
       if (image != null) {
         setState(() {
-          _selectedImages.add(File(image.path));
+          _selectedImages.add(image);
         });
       }
     } catch (e) {
@@ -109,8 +118,8 @@ class _CreatePostInGroupScreenState extends State<CreatePostInGroupScreen> {
       List<String>? mediaUrls;
 
       if (_selectedImages.isNotEmpty) {
-        mediaUrls = await _cloudinaryService.uploadMultipleImages(_selectedImages);
-        if (mediaUrls == null || mediaUrls.isEmpty) {
+        mediaUrls = await _cloudinaryService.uploadMultipleXFiles(_selectedImages);
+        if (mediaUrls.isEmpty) {
           throw Exception('Không thể upload ảnh');
         }
       }
@@ -265,17 +274,32 @@ class _CreatePostInGroupScreenState extends State<CreatePostInGroupScreen> {
                   itemBuilder: (context, index) {
                     return Stack(
                       children: [
-                        Container(
-                          width: 120,
-                          height: 120,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            image: DecorationImage(
-                              image: FileImage(_selectedImages[index]),
-                              fit: BoxFit.cover,
-                            ),
-                          ),
+                        FutureBuilder<Uint8List>(
+                          future: _selectedImages[index].readAsBytes(),
+                          builder: (context, snapshot) {
+                            return Container(
+                              width: 120,
+                              height: 120,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                color: Colors.grey.shade200,
+                              ),
+                              child: snapshot.hasData
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.memory(
+                                        snapshot.data!,
+                                        fit: BoxFit.cover,
+                                        width: 120,
+                                        height: 120,
+                                      ),
+                                    )
+                                  : const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                            );
+                          },
                         ),
                         Positioned(
                           top: 4,

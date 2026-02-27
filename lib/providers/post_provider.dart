@@ -120,6 +120,40 @@ class PostProvider with ChangeNotifier {
     }
   }
 
+  // Update post
+  Future<Post?> updatePost({
+    required String postId,
+    String? content,
+    List<String>? mediaUrls,
+    String? visibility,
+  }) async {
+    try {
+      final updated = await _postService.updatePost(
+        postId,
+        content: content,
+        mediaUrls: mediaUrls,
+        visibility: visibility,
+      );
+      final idx = _posts.indexWhere((p) => p.id == postId);
+      if (idx != -1) {
+        final old = _posts[idx];
+        _posts[idx] = updated.copyWith(
+          userName: old.userName,
+          userAvatar: old.userAvatar,
+          isLiked: old.isLiked,
+        );
+        notifyListeners();
+      }
+      return updated;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  void notifyIfNeeded() => notifyListeners();
+
   // Delete post
   Future<bool> deletePost(String postId) async {
     try {

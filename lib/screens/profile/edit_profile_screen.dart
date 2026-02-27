@@ -1,7 +1,7 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/cloudinary_service.dart';
@@ -17,8 +17,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final TextEditingController _bioController = TextEditingController();
   final TextEditingController _jobController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
-  File? _newAvatar;
-  File? _newCover;
+  XFile? _newAvatar;
+  Uint8List? _newAvatarBytes;
+  XFile? _newCover;
+  Uint8List? _newCoverBytes;
   bool _isLoading = false;
   bool _isSaving = false;
 
@@ -39,17 +41,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _pickAvatar() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked != null) {
-      setState(() => _newAvatar = File(picked.path));
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        _newAvatar = picked;
+        _newAvatarBytes = bytes;
+      });
     }
   }
 
   Future<void> _pickCover() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked != null) {
-      setState(() => _newCover = File(picked.path));
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        _newCover = picked;
+        _newCoverBytes = bytes;
+      });
     }
   }
 
@@ -73,13 +83,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       // Upload ảnh nếu có (giữ nguyên, vì Cloudinary hoạt động độc lập)
       if (_newAvatar != null) {
-        newAvatarUrl = await CloudinaryService().uploadImage(_newAvatar!);
+        newAvatarUrl = await CloudinaryService().uploadXFile(_newAvatar!);
         if (newAvatarUrl == null) {
           Fluttertoast.showToast(msg: 'Upload avatar thất bại', backgroundColor: Colors.orange);
         }
       }
       if (_newCover != null) {
-        newCoverUrl = await CloudinaryService().uploadImage(_newCover!);
+        newCoverUrl = await CloudinaryService().uploadXFile(_newCover!);
         if (newCoverUrl == null) {
           Fluttertoast.showToast(msg: 'Upload cover thất bại', backgroundColor: Colors.orange);
         }
@@ -155,8 +165,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   height: 150,
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    image: _newCover != null
-                        ? DecorationImage(image: FileImage(_newCover!), fit: BoxFit.cover)
+                    image: _newCoverBytes != null
+                        ? DecorationImage(image: MemoryImage(_newCoverBytes!), fit: BoxFit.cover)
                         : (user.cover != null
                         ? DecorationImage(image: NetworkImage(user.cover!), fit: BoxFit.cover)
                         : null),
@@ -181,8 +191,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 children: [
                   CircleAvatar(
                     radius: 60,
-                    backgroundImage: _newAvatar != null
-                        ? FileImage(_newAvatar!)
+                    backgroundImage: _newAvatarBytes != null
+                        ? MemoryImage(_newAvatarBytes!) as ImageProvider
                         : (user.avatar != null ? NetworkImage(user.avatar!) : null),
                     child: user.avatar == null && _newAvatar == null
                         ? Text(user.fullName?[0] ?? 'U', style: const TextStyle(fontSize: 40))

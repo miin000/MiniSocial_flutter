@@ -7,6 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
 import '../../providers/group_provider.dart';
 import 'comments_screen.dart';
+import 'edit_post_screen.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../config/app_config.dart';
 import 'package:flutter/services.dart';
@@ -40,28 +41,49 @@ class _PostCardState extends State<PostCard> {
     ];
 
     String? selectedReason;
+    final descriptionController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: const Text('Báo cáo bài viết'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Vui lòng chọn lý do báo cáo:'),
-              const SizedBox(height: 16),
-              ...reasons.map((reason) => RadioListTile<String>(
-                title: Text(reason, style: const TextStyle(fontSize: 14)),
-                value: reason,
-                groupValue: selectedReason,
-                onChanged: (value) {
-                  setState(() {
-                    selectedReason = value;
-                  });
-                },
-              )),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Vui lòng chọn lý do báo cáo:'),
+                const SizedBox(height: 8),
+                ...reasons.map((reason) => RadioListTile<String>(
+                  title: Text(reason, style: const TextStyle(fontSize: 14)),
+                  value: reason,
+                  groupValue: selectedReason,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (value) {
+                    setState(() {
+                      selectedReason = value;
+                    });
+                  },
+                )),
+                const SizedBox(height: 12),
+                const Text(
+                  'Mô tả thêm (tùy chọn):',
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: descriptionController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText: 'Nhập nội dung mô tả thêm...',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -75,10 +97,13 @@ class _PostCardState extends State<PostCard> {
                 final authProvider = Provider.of<AuthProvider>(context, listen: false);
                 final postProvider = Provider.of<PostProvider>(context, listen: false);
 
+                final description = descriptionController.text.trim();
+
                 final success = await postProvider.reportPost(
                   reporterId: authProvider.user!.id!,
                   reportedPostId: widget.post.id!,
                   reason: selectedReason!,
+                  description: description.isEmpty ? null : description,
                   groupId: widget.post.groupId,
                 );
 
@@ -95,7 +120,7 @@ class _PostCardState extends State<PostCard> {
           ],
         ),
       ),
-    );
+    ).then((_) => descriptionController.dispose());
   }
 
   void _showPostOptions() {
@@ -108,6 +133,25 @@ class _PostCardState extends State<PostCard> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (isOwner)
+              ListTile(
+                leading: const Icon(Icons.edit, color: Color(0xFF3b82f6)),
+                title: const Text('Chỉnh sửa bài viết'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final updated = await Navigator.push<Post>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EditPostScreen(post: widget.post),
+                    ),
+                  );
+                  if (updated != null && mounted) {
+                    // PostProvider already updated in-memory; just refresh UI
+                    Provider.of<PostProvider>(context, listen: false)
+                        .notifyIfNeeded();
+                  }
+                },
+              ),
             if (isOwner)
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
@@ -238,6 +282,22 @@ class _PostCardState extends State<PostCard> {
                             size: 13,
                             color: Colors.grey,
                           ),
+                          if (widget.post.updatedAt != null &&
+                              widget.post.createdAt != null &&
+                              widget.post.updatedAt!.isAfter(
+                                widget.post.createdAt!.add(const Duration(seconds: 5)),
+                              )) ...
+                            [
+                              const SizedBox(width: 4),
+                              Text(
+                                '• Đã chỉnh sửa',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[500],
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
                         ],
                       ),
                     ],

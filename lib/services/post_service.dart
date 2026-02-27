@@ -96,13 +96,14 @@ class PostService {
     }
   }
 
-  Future<Post> updatePost(String postId, {String? content, List<String>? mediaUrls}) async {
+  Future<Post> updatePost(String postId, {String? content, List<String>? mediaUrls, String? visibility}) async {
     try {
       final response = await _dio.patch(
         '$baseUrl/posts/$postId',
         data: {
           if (content != null) 'content': content,
           if (mediaUrls != null) 'media_urls': mediaUrls,
+          if (visibility != null) 'visibility': visibility,
         },
       );
       return Post.fromJson(response.data);
