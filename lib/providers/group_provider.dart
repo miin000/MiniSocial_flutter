@@ -269,6 +269,7 @@ class GroupProvider with ChangeNotifier {
         required String content,
         List<String>? mediaUrls,
         String? contentType,
+        List<String>? tags,
       }) async {
     try {
       final result = await _groupService.createGroupPost(
@@ -276,6 +277,7 @@ class GroupProvider with ChangeNotifier {
         content: content,
         mediaUrls: mediaUrls,
         contentType: contentType,
+        tags: tags,
       );
       if (result == null) return null;
 

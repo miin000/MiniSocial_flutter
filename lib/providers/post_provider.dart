@@ -96,6 +96,7 @@ class PostProvider with ChangeNotifier {
     List<String>? mediaUrls,
     String? groupId,
     String? visibility,
+    List<String>? tags,
   }) async {
     try {
       final newPost = await _postService.createPost(
@@ -104,6 +105,7 @@ class PostProvider with ChangeNotifier {
         mediaUrls: mediaUrls,
         groupId: groupId,
         visibility: visibility,
+        tags: tags,
       );
 
       // Only add to the main feed when the post is NOT created inside a group

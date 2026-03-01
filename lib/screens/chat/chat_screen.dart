@@ -1,21 +1,199 @@
 // lib/screens/chat/chat_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:timeago/timeago.dart' as timeago;
+import '../../providers/chat_provider.dart';
+import '../../models/conversation_model.dart';
+import 'chat_detail_screen.dart';
+import 'create_group_screen.dart';
+import 'new_chat_screen.dart';
 
-class ChatScreen extends StatelessWidget {
+class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChatProvider>().fetchConversations();
+    });
+  }
+
+  Future<void> _refresh() async {
+    await context.read<ChatProvider>().fetchConversations();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat'),
+        title: const Text('Tin nhắn', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF3b82f6),
         foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.group_add),
+            tooltip: 'Tạo nhóm',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CreateGroupScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_square),
+            tooltip: 'Chat mới',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NewChatScreen()),
+            ),
+          ),
+        ],
       ),
-      body: const Center(
-        child: Text('Chat Screen - Coming Soon'),
+      body: Consumer<ChatProvider>(
+        builder: (context, chatProvider, _) {
+          if (chatProvider.isLoading && chatProvider.conversations.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (chatProvider.conversations.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                children: [
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                  const Icon(Icons.chat_bubble_outline, size: 80, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Chưa có cuộc trò chuyện nào\nBắt đầu nhắn tin với bạn bè!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView.builder(
+              itemCount: chatProvider.conversations.length,
+              itemBuilder: (context, index) {
+                final conv = chatProvider.conversations[index];
+                return _ConversationTile(conversation: conv);
+              },
+            ),
+          );
+        },
       ),
     );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Conversation tile widget
+// ════════════════════════════════════════════════════════════════════════════════
+
+class _ConversationTile extends StatelessWidget {
+  final ConversationModel conversation;
+  const _ConversationTile({required this.conversation});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUnread = conversation.unreadCount > 0;
+
+    return ListTile(
+      leading: _buildAvatar(),
+      title: Text(
+        conversation.displayName,
+        style: TextStyle(
+          fontWeight: hasUnread ? FontWeight.bold : FontWeight.w500,
+          fontSize: 15,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        conversation.lastMessageContent ?? 'Bắt đầu trò chuyện...',
+        style: TextStyle(
+          color: hasUnread ? Colors.black87 : Colors.grey[600],
+          fontWeight: hasUnread ? FontWeight.w600 : FontWeight.normal,
+          fontSize: 13,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            _formatTime(conversation.lastMessageAt),
+            style: TextStyle(
+              fontSize: 11,
+              color: hasUnread ? const Color(0xFF3b82f6) : Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 4),
+          if (hasUnread)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3b82f6),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                conversation.unreadCount > 99 ? '99+' : '${conversation.unreadCount}',
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ),
+        ],
+      ),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatDetailScreen(conversation: conversation),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAvatar() {
+    final url = conversation.displayAvatar;
+    if (url != null && url.isNotEmpty) {
+      return CircleAvatar(
+        radius: 24,
+        backgroundImage: CachedNetworkImageProvider(url),
+      );
+    }
+    return CircleAvatar(
+      radius: 24,
+      backgroundColor: const Color.fromRGBO(59, 130, 246, 0.15),
+      child: Icon(
+        conversation.type == 'group' ? Icons.group : Icons.person,
+        color: const Color(0xFF3b82f6),
+      ),
+    );
+  }
+
+  String _formatTime(DateTime? time) {
+    if (time == null) return '';
+    final now = DateTime.now();
+    final diff = now.difference(time);
+    if (diff.inMinutes < 1) return 'Vừa xong';
+    if (diff.inHours < 24) {
+      return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    }
+    if (diff.inDays < 7) return timeago.format(time, locale: 'vi');
+    return '${time.day}/${time.month}/${time.year}';
   }
 }

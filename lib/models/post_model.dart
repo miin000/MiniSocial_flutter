@@ -21,6 +21,7 @@ class Post {
   final String? approvedBy;
   final DateTime? approvedAt;
   final String? rejectedReason;
+  final List<String> tags;
 
   Post({
     this.id,
@@ -43,6 +44,7 @@ class Post {
     this.approvedBy,
     this.approvedAt,
     this.rejectedReason,
+    this.tags = const [],
   });
 
   bool get isGroupPost => groupId != null && groupId!.isNotEmpty;
@@ -77,6 +79,9 @@ class Post {
           ? DateTime.parse(json['approved_at']) 
           : null,
       rejectedReason: json['rejected_reason'] as String?,
+      tags: json['tags'] != null
+          ? List<String>.from(json['tags'])
+          : [],
     );
   }
 
@@ -95,6 +100,7 @@ class Post {
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
       if (groupId != null) 'group_id': groupId,
+      if (tags.isNotEmpty) 'tags': tags,
     };
   }
 
@@ -115,6 +121,7 @@ class Post {
     String? userAvatar,
     bool? isLiked,
     String? groupId,
+    List<String>? tags,
   }) {
     return Post(
       id: id ?? this.id,
@@ -133,6 +140,7 @@ class Post {
       userAvatar: userAvatar ?? this.userAvatar,
       isLiked: isLiked ?? this.isLiked,
       groupId: groupId ?? this.groupId,
+      tags: tags ?? this.tags,
     );
   }
 }

@@ -146,12 +146,13 @@ class GroupService {
   }
 
   // Create a post inside a group
-  Future<Map<String, dynamic>?> createGroupPost(String groupId, {required String content, List<String>? mediaUrls, String? contentType}) async {
+  Future<Map<String, dynamic>?> createGroupPost(String groupId, {required String content, List<String>? mediaUrls, String? contentType, List<String>? tags}) async {
     try {
       final data = {
         'content': content,
         if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_urls': mediaUrls,
         if (contentType != null) 'content_type': contentType,
+        if (tags != null && tags.isNotEmpty) 'tags': tags,
       };
       final resp = await _apiService.post('/groups/$groupId/posts', data: data);
       return resp.data as Map<String, dynamic>;

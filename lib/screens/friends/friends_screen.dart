@@ -1,8 +1,12 @@
 // lib/screens/friends/friends_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../services/friend_service.dart';
+import '../../providers/chat_provider.dart';
+import '../../providers/friend_provider.dart';
+import '../chat/chat_detail_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
   const FriendsScreen({super.key});
@@ -33,11 +37,17 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
     final r = await _friendService.getRequests();
     final s = await _friendService.getSuggestions();
     setState(() {
-      _friends = f['success'] ? f['data'] as List<dynamic> : [];
-      _requests = r['success'] ? r['data'] as List<dynamic> : [];
-      _suggestions = s['success'] ? s['data'] as List<dynamic> : [];
+      _friends = f['success'] ? (f['data'] as List<dynamic>? ?? []) : [];
+      _requests = r['success'] ? (r['data'] as List<dynamic>? ?? []) : [];
+      _suggestions = s['success'] ? (s['data'] as List<dynamic>? ?? []) : [];
       _loading = false;
     });
+    // Update pending count badge
+    if (mounted) {
+      try {
+        context.read<FriendProvider>().setPendingCount(_requests.length);
+      } catch (_) {}
+    }
   }
 
   Widget _buildAvatar(String? url, String name) {
@@ -95,14 +105,26 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ElevatedButton(
-                          onPressed: () {
-                            // Navigate to messages tab (placeholder)
-                            Fluttertoast.showToast(msg: 'Chuyển đến tab Chat');
+                          onPressed: () async {
+                            final friendId = (item['id'] ?? item['_id'] ?? item['userId'])?.toString() ?? '';
+                            if (friendId.isEmpty) return;
+                            final chatProvider = context.read<ChatProvider>();
+                            final conv = await chatProvider.createPrivateChat(friendId);
+                            if (conv != null && mounted) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ChatDetailScreen(conversation: conv),
+                                ),
+                              );
+                            } else {
+                              Fluttertoast.showToast(msg: chatProvider.error ?? 'Không thể mở chat');
+                            }
                           },
                           child: const Text('Nhắn tin'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black87,
+                            backgroundColor: const Color(0xFF3b82f6),
+                            foregroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),

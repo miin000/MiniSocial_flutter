@@ -6,10 +6,11 @@ import '../../models/post_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
 import '../../providers/group_provider.dart';
+import '../../providers/chat_provider.dart';
+import '../../models/conversation_model.dart';
 import 'comments_screen.dart';
 import 'edit_post_screen.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import '../../config/app_config.dart';
 import 'package:flutter/services.dart';
 
 class PostCard extends StatefulWidget {
@@ -311,6 +312,31 @@ class _PostCardState extends State<PostCard> {
             ),
           ),
 
+          // Tags
+          if (widget.post.tags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: widget.post.tags.map((tag) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3b82f6).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '#$tag',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF3b82f6),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                )).toList(),
+              ),
+            ),
+
           // Post content
           if (widget.post.content != null && widget.post.content!.isNotEmpty)
             Padding(
@@ -387,7 +413,7 @@ class _PostCardState extends State<PostCard> {
                             shape: BoxShape.circle,
                             color: _currentImageIndex == index
                                 ? Colors.white
-                                : Colors.white.withOpacity(0.4),
+                                : const Color.fromRGBO(255, 255, 255, 0.4),
                           ),
                         ),
                       ),
@@ -457,22 +483,197 @@ class _PostCardState extends State<PostCard> {
               ),
 
               TextButton.icon(
-                onPressed: () {
-                  final url = widget.post.groupId != null
-                      ? '${AppConfig.apiBaseUrl.replaceAll('/api/v1', '')}/groups/${widget.post.groupId}/posts/${widget.post.id}'
-                      : '${AppConfig.apiBaseUrl.replaceAll('/api/v1', '')}/posts/${widget.post.id}';
-                  Clipboard.setData(ClipboardData(text: url));
-                  Fluttertoast.showToast(
-                    msg: 'Đã sao chép liên kết bài viết',
-                    backgroundColor: Colors.green,
-                  );
-                },
+                onPressed: () => _showShareToChatSheet(),
                 icon: const Icon(Icons.share_outlined, color: Colors.grey),
                 label: const Text('Chia sẻ', style: TextStyle(color: Colors.grey)),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Chia sẻ bài viết vào cuộc trò chuyện ─────────────────────────────
+  void _showShareToChatSheet() {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    // Đảm bảo đã load conversations
+    if (chatProvider.conversations.isEmpty) {
+      chatProvider.fetchConversations();
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.55,
+          maxChildSize: 0.8,
+          minChildSize: 0.35,
+          builder: (_, scrollCtrl) {
+            return Consumer<ChatProvider>(
+              builder: (_, cp, __) {
+                final conversations = cp.conversations;
+                return Column(
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.send, color: Color(0xFF3b82f6)),
+                          const SizedBox(width: 8),
+                          const Text('Chia sẻ bài viết',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          // Copy link fallback
+                          IconButton(
+                            icon: const Icon(Icons.link, color: Colors.grey),
+                            tooltip: 'Sao chép liên kết',
+                            onPressed: () {
+                              final url = 'https://minisocial.app/posts/${widget.post.id}';
+                              Clipboard.setData(ClipboardData(text: url));
+                              Fluttertoast.showToast(
+                                msg: 'Đã sao chép liên kết',
+                                backgroundColor: Colors.green,
+                              );
+                              Navigator.pop(ctx);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    // Post preview
+                    Container(
+                      margin: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          if (widget.post.mediaUrls != null &&
+                              widget.post.mediaUrls!.isNotEmpty)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: CachedNetworkImage(
+                                imageUrl: widget.post.mediaUrls![0],
+                                width: 48, height: 48, fit: BoxFit.cover,
+                              ),
+                            ),
+                          if (widget.post.mediaUrls != null &&
+                              widget.post.mediaUrls!.isNotEmpty)
+                            const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              widget.post.content ?? '📷 Hình ảnh',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Conversation list
+                    Expanded(
+                      child: conversations.isEmpty
+                          ? const Center(
+                              child: Text('Chưa có cuộc trò chuyện nào',
+                                style: TextStyle(color: Colors.grey)),
+                            )
+                          : ListView.builder(
+                              controller: scrollCtrl,
+                              itemCount: conversations.length,
+                              itemBuilder: (_, i) {
+                                final conv = conversations[i];
+                                return _ShareConversationTile(
+                                  conversation: conv,
+                                  onTap: () => _doSharePost(conv, ctx),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _doSharePost(ConversationModel conv, BuildContext sheetCtx) async {
+    Navigator.pop(sheetCtx);
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final ok = await chatProvider.sharePost(
+      convId: conv.id,
+      postId: widget.post.id!,
+      content: widget.post.content,
+    );
+    Fluttertoast.showToast(
+      msg: ok ? 'Đã chia sẻ bài viết' : 'Không thể chia sẻ',
+      backgroundColor: ok ? Colors.green : Colors.red,
+    );
+  }
+}
+
+// ── Tile cho conversation trong share sheet ─────────────────────────────
+class _ShareConversationTile extends StatelessWidget {
+  final ConversationModel conversation;
+  final VoidCallback onTap;
+  const _ShareConversationTile({required this.conversation, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: _buildAvatar(),
+      title: Text(
+        conversation.displayName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+      ),
+      subtitle: conversation.type == 'group'
+          ? Text('${conversation.memberCount} thành viên',
+              style: const TextStyle(fontSize: 12))
+          : null,
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3b82f6),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Text('Gửi',
+          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+      ),
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildAvatar() {
+    final url = conversation.displayAvatar;
+    if (url != null && url.isNotEmpty) {
+      return CircleAvatar(
+        radius: 22,
+        backgroundImage: CachedNetworkImageProvider(url),
+      );
+    }
+    return CircleAvatar(
+      radius: 22,
+      backgroundColor: const Color(0xFF3b82f6).withValues(alpha: 0.15),
+      child: Icon(
+        conversation.type == 'group' ? Icons.group : Icons.person,
+        color: const Color(0xFF3b82f6),
+        size: 22,
       ),
     );
   }

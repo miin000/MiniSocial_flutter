@@ -77,6 +77,7 @@ class PostService {
     List<String>? mediaUrls,
     String? groupId,
     String? visibility, // 'public', 'friends', 'private'
+    List<String>? tags,
   }) async {
     try {
       final response = await _dio.post(
@@ -88,11 +89,22 @@ class PostService {
           if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_urls': mediaUrls,
           'content_type': mediaUrls != null && mediaUrls.isNotEmpty ? 'image' : 'text',
           'visibility': visibility ?? 'public',
+          if (tags != null && tags.isNotEmpty) 'tags': tags,
         },
       );
       return Post.fromJson(response.data);
     } catch (e) {
       throw Exception('Failed to create post: $e');
+    }
+  }
+
+  /// Lấy danh sách categories (grouped) để hiển thị tag selector
+  Future<List<Map<String, dynamic>>> getCategories() async {
+    try {
+      final response = await _dio.get('$baseUrl/categories');
+      return List<Map<String, dynamic>>.from(response.data);
+    } catch (e) {
+      throw Exception('Failed to load categories: $e');
     }
   }
 

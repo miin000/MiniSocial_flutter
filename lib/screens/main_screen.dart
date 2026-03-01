@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
+import '../providers/friend_provider.dart';
 import 'home/home_screen.dart';
 import 'friends/friends_screen.dart';
 import 'chat/chat_screen.dart';
@@ -41,12 +42,11 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _initNotifications() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final notifProvider = Provider.of<NotificationProvider>(context, listen: false);
+    final friendProvider = Provider.of<FriendProvider>(context, listen: false);
     if (authProvider.user != null) {
-      // Đợi Firebase Auth sign in xong trước khi start Firestore listener
-      // signInFirebase() đã được gọi trong AuthProvider.login() / checkAuthStatus()
-      // Chờ thêm 1 chút để đảm bảo Firebase Auth hoàn tất
       await Future.delayed(const Duration(milliseconds: 500));
       notifProvider.startListening(authProvider.user!.id);
+      friendProvider.fetchPendingCount();
     }
   }
 
@@ -59,14 +59,19 @@ class _MainScreenState extends State<MainScreen> {
       Provider.of<NotificationProvider>(context, listen: false)
           .fetchUnreadCount();
     }
+    // Refresh pending friend count when switching to friends tab
+    if (index == 1) {
+      Provider.of<FriendProvider>(context, listen: false)
+          .fetchPendingCount();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_selectedIndex],
-      bottomNavigationBar: Consumer<NotificationProvider>(
-        builder: (context, notifProvider, _) {
+      bottomNavigationBar: Consumer2<NotificationProvider, FriendProvider>(
+        builder: (context, notifProvider, friendProvider, _) {
           return BottomNavigationBar(
             type: BottomNavigationBarType.fixed,
             items: <BottomNavigationBarItem>[
@@ -74,8 +79,17 @@ class _MainScreenState extends State<MainScreen> {
                 icon: Icon(Icons.home),
                 label: 'Trang chủ',
               ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.people),
+              BottomNavigationBarItem(
+                icon: Badge(
+                  isLabelVisible: friendProvider.pendingCount > 0,
+                  label: Text(
+                    friendProvider.pendingCount > 99
+                        ? '99+'
+                        : friendProvider.pendingCount.toString(),
+                    style: const TextStyle(fontSize: 10, color: Colors.white),
+                  ),
+                  child: const Icon(Icons.people),
+                ),
                 label: 'Bạn bè',
               ),
               const BottomNavigationBarItem(

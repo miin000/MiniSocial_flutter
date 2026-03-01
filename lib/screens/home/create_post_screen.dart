@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/post_service.dart';
+import '../../services/api_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
 class CreatePostScreen extends StatefulWidget {
@@ -21,6 +23,39 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   bool _isUploading = false;
   final ImagePicker _picker = ImagePicker();
   String _visibility = 'public'; // 'public', 'friends', 'private'
+
+  // ── Tags ───────────────────────────────────────────────────────────────
+  List<Map<String, dynamic>> _categoryGroups = [];
+  final List<String> _selectedTags = [];
+  bool _loadingCategories = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      await ApiService().loadToken();
+      final service = PostService(ApiService().dio);
+      final groups = await service.getCategories();
+      if (mounted) {
+        setState(() {
+          _categoryGroups = groups;
+          _loadingCategories = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingCategories = false);
+        Fluttertoast.showToast(
+          msg: 'Không tải được danh sách chủ đề',
+          backgroundColor: Colors.red,
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -92,6 +127,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       return;
     }
 
+    if (_selectedTags.isEmpty) {
+      Fluttertoast.showToast(
+        msg: 'Vui lòng chọn ít nhất 1 chủ đề (tag)',
+        backgroundColor: Colors.orange,
+      );
+      return;
+    }
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final postProvider = Provider.of<PostProvider>(context, listen: false);
     final userId = authProvider.user?.id;
@@ -125,6 +168,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         content: content.isNotEmpty ? content : null,
         mediaUrls: mediaUrls,
         visibility: _visibility,
+        tags: _selectedTags,
       );
 
       if (createdPost != null) {
@@ -150,6 +194,222 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         });
       }
     }
+  }
+
+  // ── Tag selector widget ──────────────────────────────────────────────
+  Widget _buildTagSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.label_outline, size: 18, color: Color(0xFF3b82f6)),
+            const SizedBox(width: 6),
+            const Text(
+              'Chủ đề',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '(${_selectedTags.length}/3)',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Selected tags chips
+        if (_selectedTags.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _selectedTags.map((slug) {
+                final cat = _findCategory(slug);
+                return Chip(
+                  label: Text(
+                    '${cat?['icon'] ?? '🏷️'} ${cat?['name'] ?? slug}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () => setState(() => _selectedTags.remove(slug)),
+                  backgroundColor: const Color(0xFF3b82f6).withValues(alpha: 0.1),
+                  side: const BorderSide(color: Color(0xFF3b82f6), width: 0.5),
+                );
+              }).toList(),
+            ),
+          ),
+        // Add tag button
+        InkWell(
+          onTap: _selectedTags.length >= 3 ? null : _showTagPicker,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border.all(color: _selectedTags.isEmpty ? Colors.red.shade200 : Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.add_circle_outline, size: 20,
+                  color: _selectedTags.length >= 3 ? Colors.grey : const Color(0xFF3b82f6)),
+                const SizedBox(width: 8),
+                Text(
+                  _selectedTags.isEmpty
+                      ? 'Chọn ít nhất 1 chủ đề *'
+                      : 'Thêm chủ đề',
+                  style: TextStyle(
+                    color: _selectedTags.isEmpty ? Colors.red.shade400 : Colors.grey[600],
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Map<String, dynamic>? _findCategory(String slug) {
+    for (final group in _categoryGroups) {
+      final categories = group['items'] as List? ?? [];
+      for (final cat in categories) {
+        if (cat['slug'] == slug) return Map<String, dynamic>.from(cat);
+      }
+    }
+    return null;
+  }
+
+  void _showTagPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.65,
+              maxChildSize: 0.85,
+              minChildSize: 0.4,
+              builder: (_, scrollCtrl) {
+                return Column(
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.label, color: Color(0xFF3b82f6)),
+                          const SizedBox(width: 8),
+                          const Text('Chọn chủ đề',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          Text('${_selectedTags.length}/3',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Xong',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    // Category groups
+                    Expanded(
+                      child: _loadingCategories
+                          ? const Center(child: CircularProgressIndicator())
+                          : ListView.builder(
+                              controller: scrollCtrl,
+                              itemCount: _categoryGroups.length,
+                              itemBuilder: (_, gi) {
+                                final group = _categoryGroups[gi];
+                                final groupName = group['group'] ?? '';
+                                final categories = (group['items'] as List?) ?? [];
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                                      child: Text(
+                                        groupName,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                      child: Wrap(
+                                        spacing: 8,
+                                        runSpacing: 6,
+                                        children: categories.map<Widget>((cat) {
+                                          final slug = cat['slug'] as String;
+                                          final selected = _selectedTags.contains(slug);
+                                          final disabled = !selected && _selectedTags.length >= 3;
+                                          return FilterChip(
+                                            label: Text(
+                                              '${cat['icon'] ?? ''} ${cat['name'] ?? slug}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: disabled
+                                                    ? Colors.grey
+                                                    : selected
+                                                        ? Colors.white
+                                                        : Colors.black87,
+                                              ),
+                                            ),
+                                            selected: selected,
+                                            onSelected: disabled
+                                                ? null
+                                                : (val) {
+                                                    setState(() {
+                                                      if (val) {
+                                                        _selectedTags.add(slug);
+                                                      } else {
+                                                        _selectedTags.remove(slug);
+                                                      }
+                                                    });
+                                                    setModalState(() {});
+                                                  },
+                                            selectedColor: const Color(0xFF3b82f6),
+                                            checkmarkColor: Colors.white,
+                                            backgroundColor:
+                                                disabled ? Colors.grey.shade100 : Colors.grey.shade50,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                              side: BorderSide(
+                                                color: selected
+                                                    ? const Color(0xFF3b82f6)
+                                                    : Colors.grey.shade300,
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
   }
 
   IconData _getVisibilityIcon() {
@@ -338,6 +598,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               ),
               style: const TextStyle(fontSize: 16),
             ),
+            const SizedBox(height: 12),
+
+            // ── Tag selector ─────────────────────────────────────────────
+            _buildTagSelector(),
             const SizedBox(height: 16),
             
             // Selected images
