@@ -18,6 +18,7 @@ class PostProvider with ChangeNotifier {
   bool _profileLoading = false;
   int _profilePage = 1;
   bool _profileHasMore = true;
+  int _profileTotal = 0; // tổng số bài thật từ API
 
   List<Post> get posts => _posts;
   bool get isLoading => _isLoading;
@@ -27,6 +28,7 @@ class PostProvider with ChangeNotifier {
   List<Post> get profilePosts => _profilePosts;
   bool get profileLoading => _profileLoading;
   bool get profileHasMore => _profileHasMore;
+  int get profileTotal => _profileTotal;
 
   // Load posts
   Future<void> loadPosts({
@@ -100,6 +102,7 @@ class PostProvider with ChangeNotifier {
     _profileLoading = false;
     _profilePage = 1;
     _profileHasMore = true;
+    _profileTotal = 0;
     notifyListeners();
   }
 
@@ -326,16 +329,20 @@ class PostProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _postService.getPosts(
+      // Dùng endpoint /posts/user/:id — chỉ lấy bài của đúng user đó
+      final result = await _postService.getUserPosts(
+        userId,
         page: _profilePage,
         limit: 20,
-        userId: userId,
       );
       final List<Post> newPosts = result['posts'] as List<Post>;
+      final int total = (result['total'] as num?)?.toInt() ?? 0;
       if (refresh) {
         _profilePosts = newPosts;
+        _profileTotal = total; // lưu tổng thật từ API
       } else {
         _profilePosts.addAll(newPosts);
+        // total không thay đổi khi phân trang
       }
       _profileHasMore = newPosts.length >= 20;
       if (_profileHasMore) _profilePage++;
@@ -352,6 +359,7 @@ class PostProvider with ChangeNotifier {
     _profilePage = 1;
     _profileHasMore = true;
     _profileLoading = false;
+    _profileTotal = 0;
     notifyListeners();
   }
 }

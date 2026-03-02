@@ -84,7 +84,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final profilePosts = postProvider.profilePosts;
-    final postsCount = profilePosts.length;
+    // Dùng tổng thật từ API, không đếm số bài đã load (phân trang)
+    final postsCount = postProvider.profileTotal;
     final likesCount = profilePosts.fold<int>(0, (sum, post) => sum + post.likesCount);
 
     return Scaffold(
