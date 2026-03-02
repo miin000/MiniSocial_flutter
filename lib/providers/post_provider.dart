@@ -13,10 +13,20 @@ class PostProvider with ChangeNotifier {
   int _currentPage = 1;
   bool _hasMore = true;
 
+  // Separate list for profile screen (avoids overwriting home feed)
+  List<Post> _profilePosts = [];
+  bool _profileLoading = false;
+  int _profilePage = 1;
+  bool _profileHasMore = true;
+
   List<Post> get posts => _posts;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasMore => _hasMore;
+
+  List<Post> get profilePosts => _profilePosts;
+  bool get profileLoading => _profileLoading;
+  bool get profileHasMore => _profileHasMore;
 
   // Load posts
   Future<void> loadPosts({
@@ -86,6 +96,10 @@ class PostProvider with ChangeNotifier {
     _error = null;
     _currentPage = 1;
     _hasMore = true;
+    _profilePosts = [];
+    _profileLoading = false;
+    _profilePage = 1;
+    _profileHasMore = true;
     notifyListeners();
   }
 
@@ -288,9 +302,56 @@ class PostProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Thêm vào class PostProvider
   void setPostsForProfile(List<Post> myPosts) {
-    _posts = myPosts;
+    _profilePosts = myPosts;
+    notifyListeners();
+  }
+
+  Future<void> loadProfilePosts(String userId, {bool refresh = false}) async {
+    if (refresh) {
+      _profilePage = 1;
+      _profileHasMore = true;
+      _profilePosts = [];
+    }
+    if (_profileLoading || !_profileHasMore) return;
+
+    try {
+      await ApiService().loadToken();
+      if (!ApiService().hasToken) return;
+    } catch (_) {
+      return;
+    }
+
+    _profileLoading = true;
+    notifyListeners();
+
+    try {
+      final result = await _postService.getPosts(
+        page: _profilePage,
+        limit: 20,
+        userId: userId,
+      );
+      final List<Post> newPosts = result['posts'] as List<Post>;
+      if (refresh) {
+        _profilePosts = newPosts;
+      } else {
+        _profilePosts.addAll(newPosts);
+      }
+      _profileHasMore = newPosts.length >= 20;
+      if (_profileHasMore) _profilePage++;
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _profileLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void clearProfilePosts() {
+    _profilePosts = [];
+    _profilePage = 1;
+    _profileHasMore = true;
+    _profileLoading = false;
     notifyListeners();
   }
 }

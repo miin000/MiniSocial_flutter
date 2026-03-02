@@ -71,10 +71,31 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
         backgroundColor: const Color(0xFF3b82f6),
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'Danh sách bạn'),
-            Tab(text: 'Lời mời'),
-            Tab(text: 'Gợi ý'),
+          tabs: [
+            const Tab(text: 'Danh sách bạn'),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Lời mời'),
+                  if (_requests.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _requests.length > 99 ? '99+' : '${_requests.length}',
+                        style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Tab(text: 'Gợi ý'),
           ],
         ),
       ),

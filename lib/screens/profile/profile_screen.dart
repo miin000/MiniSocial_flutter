@@ -4,6 +4,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
+import '../../services/friend_service.dart';
 import '../home/post_card.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
@@ -18,6 +19,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
+  int _friendsCount = 0;
 
   @override
   void initState() {
@@ -36,30 +38,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       await authProvider.checkAuthStatus();
-
-      // Load bài viết của chính mình
       final currentUserId = authProvider.user?.id;
       if (currentUserId != null) {
-        await postProvider.loadPosts(refresh: true, userId: currentUserId);
-
-        final myPosts = postProvider.posts.where((post) => post.userId == currentUserId).toList();
-        postProvider.setPostsForProfile(myPosts);
+        await Future.wait([
+          postProvider.loadProfilePosts(currentUserId, refresh: true),
+          _fetchFriendsCount(),
+        ]);
       }
     } catch (e) {
       Fluttertoast.showToast(msg: 'Lỗi tải hồ sơ', backgroundColor: Colors.red);
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _fetchFriendsCount() async {
+    try {
+      final result = await FriendService().getFriends(limit: 1000);
+      if (result['success'] == true && result['data'] is List && mounted) {
+        setState(() => _friendsCount = (result['data'] as List).length);
+      }
+    } catch (_) {}
   }
 
   void _onScroll() {
     final postProvider = Provider.of<PostProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userId = authProvider.user?.id;
     if (_scrollController.position.extentAfter < 300 &&
-        !postProvider.isLoading &&
-        postProvider.hasMore) {
-      _reloadProfile(); // Reload khi scroll xuống cuối (infinite scroll cho my posts)
+        !postProvider.profileLoading &&
+        postProvider.profileHasMore &&
+        userId != null) {
+      postProvider.loadProfilePosts(userId);
     }
   }
 
@@ -73,9 +83,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final postsCount = postProvider.posts.length;
-    final likesCount = postProvider.posts.fold<int>(0, (sum, post) => sum + post.likesCount);
-    final friendsCount = 0;
+    final profilePosts = postProvider.profilePosts;
+    final postsCount = profilePosts.length;
+    final likesCount = profilePosts.fold<int>(0, (sum, post) => sum + post.likesCount);
 
     return Scaffold(
       appBar: AppBar(
@@ -205,7 +215,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _buildStatColumn('$friendsCount', 'Bạn bè'),
+                            _buildStatColumn('$_friendsCount', 'Bạn bè'),
                             _buildStatColumn('$postsCount', 'Bài viết'),
                             _buildStatColumn('$likesCount', 'Lượt thích'),
                           ],
@@ -225,8 +235,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               );
 
                               if (result == true && mounted) {
-                                // Reload posts của mình
-                                await _reloadProfile();
+                                // Chỉ reload user info, không cần reload toàn trang
+                                await Provider.of<AuthProvider>(context, listen: false).checkAuthStatus();
                                 setState(() {});
 
                                 Fluttertoast.showToast(msg: 'Đã cập nhật hồ sơ!', backgroundColor: Colors.green);
@@ -247,9 +257,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ],
-          body: _isLoading && postProvider.posts.isEmpty
+          body: _isLoading && profilePosts.isEmpty
               ? const Center(child: CircularProgressIndicator())
-              : postProvider.posts.isEmpty
+              : profilePosts.isEmpty
               ? SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: Center(
@@ -272,8 +282,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 )
               : ListView.builder(
-                  itemCount: postProvider.posts.length,
-                  itemBuilder: (context, index) => PostCard(post: postProvider.posts[index]),
+                  itemCount: profilePosts.length + (postProvider.profileHasMore ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == profilePosts.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    return PostCard(post: profilePosts[index]);
+                  },
                 ),
         ),
       ),
