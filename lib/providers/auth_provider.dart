@@ -54,22 +54,14 @@ class AuthProvider with ChangeNotifier {
       if (token != null && userJson != null) {
         _token = token;
 
-        // Lấy dữ liệu mới từ API
+        // Lấy dữ liệu mới từ API (full profile)
         final result = await _authService.getMe();
         if (result['success']) {
           final apiUser = result['user'] as UserModel;
-          
-          _user = _user!.copyWith(
-            fullName: apiUser.fullName ?? _user!.fullName,
-            bio: apiUser.bio ?? _user!.bio,
-            job: apiUser.job ?? _user!.job,
-            location: apiUser.location ?? _user!.location,
-            avatar: apiUser.avatar ?? _user!.avatar,
-            cover: apiUser.cover ?? _user!.cover,
-            rolesAdmin: apiUser.rolesAdmin ?? _user!.rolesAdmin,
-            rolesGroup: apiUser.rolesGroup ?? _user!.rolesGroup,
+          // Dùng trực tiếp dữ liệu từ server, giữ lại id/email/token
+          _user = apiUser.copyWith(
+            id: apiUser.id.isNotEmpty ? apiUser.id : _user!.id,
           );
-          
           await _saveUserData(_user!);
         }
         _status = AuthStatus.authenticated;

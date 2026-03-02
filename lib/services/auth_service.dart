@@ -88,10 +88,11 @@ class AuthService {
     }
   }
 
-  // Lấy thông tin user hiện tại
+  // Lấy thông tin user hiện tại (full profile)
   Future<Map<String, dynamic>> getMe() async {
     try {
-      final response = await _apiService.get('/auth/me');
+      await _apiService.loadToken();
+      final response = await _apiService.get('/users/profile');
       final user = UserModel.fromJson(response.data);
 
       return {
@@ -153,6 +154,9 @@ class AuthService {
         if (user.location != null && user.location!.isNotEmpty) 'location': user.location,
         if (user.avatar != null && user.avatar!.isNotEmpty) 'avatar_url': user.avatar,
         if (user.cover != null && user.cover!.isNotEmpty) 'cover_url': user.cover,
+        if (user.phone != null && user.phone!.isNotEmpty) 'phone': user.phone,
+        if (user.gender != null && user.gender!.isNotEmpty) 'gender': user.gender,
+        if (user.birthdate != null) 'birthdate': user.birthdate!.toIso8601String(),
       };
       
       final response = await _apiService.patch('/users/profile', data: sendData);

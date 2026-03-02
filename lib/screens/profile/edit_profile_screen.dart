@@ -14,9 +14,15 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
+  final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
   final TextEditingController _jobController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+
+  String? _selectedGender;
+  DateTime? _birthdate;
+
   XFile? _newAvatar;
   Uint8List? _newAvatarBytes;
   XFile? _newCover;
@@ -24,17 +30,38 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isLoading = false;
   bool _isSaving = false;
 
+  static const List<String> _genderOptions = ['male', 'female', 'other'];
+  static const Map<String, String> _genderLabels = {
+    'male': 'Nam',
+    'female': 'Nữ',
+    'other': 'Khác',
+  };
+
   @override
   void initState() {
     super.initState();
     final user = Provider.of<AuthProvider>(context, listen: false).user;
     if (user != null) {
+      _fullNameController.text = user.fullName ?? '';
       _bioController.text = user.bio ?? '';
       _jobController.text = user.job ?? '';
       _locationController.text = user.location ?? '';
+      _phoneController.text = user.phone ?? '';
+      _selectedGender = user.gender;
+      _birthdate = user.birthdate;
     } else {
       Fluttertoast.showToast(msg: 'Không tìm thấy thông tin người dùng', backgroundColor: Colors.red);
     }
+  }
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _bioController.dispose();
+    _jobController.dispose();
+    _locationController.dispose();
+    _phoneController.dispose();
+    super.dispose();
   }
 
   Future<void> _pickAvatar() async {
@@ -61,6 +88,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  Future<void> _pickBirthdate() async {
+    final now = DateTime.now();
+    final initial = _birthdate ?? DateTime(now.year - 20, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: now,
+      helpText: 'Chọn ngày sinh',
+    );
+    if (picked != null) {
+      setState(() => _birthdate = picked);
+    }
+  }
+
   Future<void> _saveProfile() async {
     if (_isSaving) return;
 
@@ -79,7 +121,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     String? newCoverUrl;
 
     try {
-      // Upload ảnh nếu có (giữ nguyên, vì Cloudinary hoạt động độc lập)
       if (_newAvatar != null) {
         newAvatarUrl = await CloudinaryService().uploadXFile(_newAvatar!);
         if (newAvatarUrl == null) {
@@ -93,16 +134,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         }
       }
 
-      // Tạo user mới với thông tin cập nhật
       final updatedUser = user.copyWith(
+        fullName: _fullNameController.text.trim(),
         bio: _bioController.text.trim(),
         job: _jobController.text.trim(),
         location: _locationController.text.trim(),
+        phone: _phoneController.text.trim(),
+        gender: _selectedGender,
+        birthdate: _birthdate,
         avatar: newAvatarUrl ?? user.avatar,
         cover: newCoverUrl ?? user.cover,
       );
 
-      // Gửi lên server
       final result = await authProvider.updateProfile(updatedUser);
       if (result['success'] == true) {
         Fluttertoast.showToast(
@@ -115,7 +158,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           msg: result['message'] ?? 'Không thể cập nhật',
           backgroundColor: Colors.red,
         );
-        // vẫn cập nhật local để hiển thị tạm
         await authProvider.updateLocalUser(updatedUser);
       }
     } catch (e) {
@@ -124,6 +166,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  String _formatDate(DateTime dt) {
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
   }
 
   @override
@@ -143,17 +189,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         actions: [
           _isSaving
               ? const Padding(
-            padding: EdgeInsets.all(16),
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          )
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
               : TextButton(
-            onPressed: _saveProfile,
-            child: const Text('Lưu', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ),
+                  onPressed: _saveProfile,
+                  child: const Text('Lưu', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
         ],
       ),
       body: SingleChildScrollView(
@@ -171,8 +217,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     image: _newCoverBytes != null
                         ? DecorationImage(image: MemoryImage(_newCoverBytes!), fit: BoxFit.cover)
                         : (user.cover != null
-                        ? DecorationImage(image: NetworkImage(user.cover!), fit: BoxFit.cover)
-                        : null),
+                            ? DecorationImage(image: NetworkImage(user.cover!), fit: BoxFit.cover)
+                            : null),
                     color: Colors.blue,
                   ),
                 ),
@@ -214,10 +260,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Họ tên
+            TextField(
+              controller: _fullNameController,
+              decoration: const InputDecoration(
+                labelText: 'Họ và tên',
+                prefixIcon: Icon(Icons.person_outline),
+                border: OutlineInputBorder(),
+              ),
+              enabled: !_isSaving,
+            ),
+            const SizedBox(height: 16),
+
+            // Bio
             TextField(
               controller: _bioController,
               decoration: const InputDecoration(
                 labelText: 'Mô tả ngắn (bio)',
+                prefixIcon: Icon(Icons.info_outline),
                 border: OutlineInputBorder(),
               ),
               maxLines: 3,
@@ -225,23 +285,86 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
             const SizedBox(height: 16),
 
+            // Công việc
             TextField(
               controller: _jobController,
               decoration: const InputDecoration(
                 labelText: 'Công việc',
+                prefixIcon: Icon(Icons.work_outline),
                 border: OutlineInputBorder(),
               ),
               enabled: !_isSaving,
             ),
             const SizedBox(height: 16),
 
+            // Vị trí
             TextField(
               controller: _locationController,
               decoration: const InputDecoration(
                 labelText: 'Vị trí (thành phố)',
+                prefixIcon: Icon(Icons.location_on_outlined),
                 border: OutlineInputBorder(),
               ),
               enabled: !_isSaving,
+            ),
+            const SizedBox(height: 16),
+
+            // Số điện thoại
+            TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Số điện thoại',
+                prefixIcon: Icon(Icons.phone_outlined),
+                border: OutlineInputBorder(),
+              ),
+              enabled: !_isSaving,
+            ),
+            const SizedBox(height: 16),
+
+            // Giới tính
+            DropdownButtonFormField<String>(
+              value: _selectedGender,
+              decoration: const InputDecoration(
+                labelText: 'Giới tính',
+                prefixIcon: Icon(Icons.wc_outlined),
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('-- Chọn giới tính --')),
+                ..._genderOptions.map((g) => DropdownMenuItem(
+                      value: g,
+                      child: Text(_genderLabels[g] ?? g),
+                    )),
+              ],
+              onChanged: _isSaving ? null : (val) => setState(() => _selectedGender = val),
+            ),
+            const SizedBox(height: 16),
+
+            // Ngày sinh
+            InkWell(
+              onTap: _isSaving ? null : _pickBirthdate,
+              borderRadius: BorderRadius.circular(4),
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Ngày sinh',
+                  prefixIcon: Icon(Icons.cake_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _birthdate != null ? _formatDate(_birthdate!) : 'Chọn ngày sinh',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: _birthdate != null ? null : Colors.grey[500],
+                      ),
+                    ),
+                    const Icon(Icons.calendar_today_outlined, size: 18, color: Colors.grey),
+                  ],
+                ),
+              ),
             ),
           ],
         ),

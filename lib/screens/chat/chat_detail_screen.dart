@@ -29,12 +29,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   MessageModel? _replyTo;
   bool _isSending = false;
+  late final ChatProvider _chatProvider;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().fetchMessages(widget.conversation.id, refresh: true);
+    _chatProvider = context.read<ChatProvider>();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _chatProvider.fetchMessages(widget.conversation.id, refresh: true);
+      if (mounted) {
+        _chatProvider.startMessagesListener(widget.conversation.id);
+      }
     });
     _scrollController.addListener(_onScroll);
   }
@@ -52,6 +57,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   void dispose() {
     _msgController.dispose();
     _scrollController.dispose();
+    _chatProvider.stopMessagesListener(widget.conversation.id);
     super.dispose();
   }
 

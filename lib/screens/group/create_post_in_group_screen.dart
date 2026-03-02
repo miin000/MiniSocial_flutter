@@ -523,7 +523,7 @@ class _CreatePostInGroupScreenState extends State<CreatePostInGroupScreen> {
                               itemBuilder: (_, gi) {
                                 final group = _categoryGroups[gi];
                                 final groupName = group['group'] ?? '';
-                                final categories = (group['categories'] as List?) ?? [];
+                                final categories = (group['items'] as List?) ?? [];
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [

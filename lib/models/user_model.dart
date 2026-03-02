@@ -10,6 +10,9 @@ class UserModel {
   final String? bio;
   final String? job;
   final String? location;
+  final String? phone;
+  final String? gender;
+  final DateTime? birthdate;
   final DateTime? createdAt;
 
   UserModel({
@@ -24,6 +27,9 @@ class UserModel {
     this.bio,
     this.job,
     this.location,
+    this.phone,
+    this.gender,
+    this.birthdate,
     this.createdAt,
   });
 
@@ -40,7 +46,14 @@ class UserModel {
       bio: json['bio'],
       job: json['job'],
       location: json['location'],
-      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,  // ← THÊM
+      phone: json['phone'],
+      gender: json['gender'],
+      birthdate: json['birthdate'] != null ? DateTime.tryParse(json['birthdate'].toString()) : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
+          : (json['created_at'] != null
+              ? DateTime.tryParse(json['created_at'].toString())
+              : null),
     );
   }
 
@@ -57,6 +70,9 @@ class UserModel {
       'bio': bio,
       'job': job,
       'location': location,
+      'phone': phone,
+      'gender': gender,
+      'birthdate': birthdate?.toIso8601String(),
     };
   }
 
@@ -72,6 +88,9 @@ class UserModel {
     String? bio,
     String? job,
     String? location,
+    String? phone,
+    String? gender,
+    DateTime? birthdate,
     DateTime? createdAt,
   }) {
     return UserModel(
@@ -86,6 +105,9 @@ class UserModel {
       bio: bio ?? this.bio,
       job: job ?? this.job,
       location: location ?? this.location,
+      phone: phone ?? this.phone,
+      gender: gender ?? this.gender,
+      birthdate: birthdate ?? this.birthdate,
       createdAt: createdAt ?? this.createdAt,
     );
   }

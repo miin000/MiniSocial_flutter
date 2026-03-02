@@ -1,6 +1,9 @@
 // lib/providers/chat_provider.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import '../services/chat_service.dart';
 import '../models/conversation_model.dart';
 import '../models/message_model.dart';
@@ -17,6 +20,9 @@ class ChatProvider with ChangeNotifier {
   String? _error;
   Map<String, int> _currentPage = {};
   Map<String, bool> _hasMore = {};
+  // Firestore realtime subscriptions
+  StreamSubscription<QuerySnapshot>? _conversationsSubscription;
+  final Map<String, StreamSubscription<QuerySnapshot>> _messagesSubscriptions = {};
 
   // ── Getters ──────────────────────────────────────────────────────────────
   List<ConversationModel> get conversations => _conversations;
@@ -62,6 +68,10 @@ class ChatProvider with ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+
+    // Bắt đầu Firestore listener sau khi load xong REST
+    final uid = fb_auth.FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) _startConversationsListener(uid);
   }
 
   Future<ConversationModel?> createPrivateChat(String friendId) async {
@@ -159,6 +169,13 @@ class ChatProvider with ChangeNotifier {
       } else {
         _messages[convId] = [...(_messages[convId] ?? []), ...newMessages];
       }
+
+      // Sắp xếp: newest first (index 0) để ListView reverse hiển thị đúng
+      _messages[convId]?.sort((a, b) {
+        final ta = a.createdAt ?? DateTime(2000);
+        final tb = b.createdAt ?? DateTime(2000);
+        return tb.compareTo(ta); // descending — newest first
+      });
 
       _currentPage[convId] = page + 1;
       _hasMore[convId] = (_messages[convId]?.length ?? 0) < total;
@@ -352,6 +369,7 @@ class ChatProvider with ChangeNotifier {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   void clearAll() {
+    stopAllListeners();
     _conversations = [];
     _messages = {};
     _members = {};
@@ -359,5 +377,156 @@ class ChatProvider with ChangeNotifier {
     _hasMore = {};
     _error = null;
     notifyListeners();
+  }
+
+  // ── Firestore Realtime Listeners ──────────────────────────────────────────
+
+  void _startConversationsListener(String userId) {
+    if (_conversationsSubscription != null) return;
+    _conversationsSubscription = FirebaseFirestore.instance
+        .collection('chats')
+        .where('participant_ids', arrayContains: userId)
+        .snapshots()
+        .listen((snapshot) {
+      bool changed = false;
+      for (final change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.modified ||
+            change.type == DocumentChangeType.added) {
+          final data = change.doc.data() as Map<String, dynamic>? ?? {};
+          final idx = _conversations.indexWhere((c) => c.id == change.doc.id);
+          if (idx >= 0) {
+            final lastAtRaw = data['last_message_at'];
+            final lastAt = lastAtRaw is Timestamp
+                ? lastAtRaw.toDate()
+                : (lastAtRaw != null
+                    ? DateTime.tryParse(lastAtRaw.toString())
+                    : null);
+            final current = _conversations[idx];
+            if (lastAt != null &&
+                (current.lastMessageAt == null ||
+                    lastAt.isAfter(current.lastMessageAt!))) {
+              _conversations[idx] = current.copyWith(
+                lastMessageContent:
+                    data['last_message_content'] ?? current.lastMessageContent,
+                lastMessageAt: lastAt,
+                lastMessageSenderId:
+                    data['last_sender_id'] ?? current.lastMessageSenderId,
+              );
+              changed = true;
+            }
+          }
+        }
+      }
+      if (changed) {
+        _conversations.sort((a, b) {
+          final aTime = a.lastMessageAt ?? a.createdAt ?? DateTime(2000);
+          final bTime = b.lastMessageAt ?? b.createdAt ?? DateTime(2000);
+          return bTime.compareTo(aTime);
+        });
+        notifyListeners();
+      }
+    }, onError: (e) {
+      debugPrint('[ChatProvider] Conversations Firestore error: $e');
+    });
+  }
+
+  /// Bắt đầu lắng nghe tin nhắn mới trong một cuộc trò chuyện qua Firestore
+  void startMessagesListener(String convId) {
+    if (_messagesSubscriptions.containsKey(convId)) return;
+    final uid = fb_auth.FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final sub = FirebaseFirestore.instance
+        .collection('chats')
+        .doc(convId)
+        .collection('messages')
+        .where('participant_ids', arrayContains: uid)
+        .orderBy('created_at', descending: true)
+        .limit(50)
+        .snapshots()
+        .listen((snapshot) {
+      bool changed = false;
+      for (final change in snapshot.docChanges) {
+        final data = change.doc.data() as Map<String, dynamic>? ?? {};
+        final msgMap = _firestoreToMessageMap(change.doc.id, data);
+        final msg = MessageModel.fromJson(msgMap);
+        final msgs = List<MessageModel>.from(_messages[convId] ?? []);
+
+        if (change.type == DocumentChangeType.added) {
+          final exists = msgs.any((m) => m.id == msg.id);
+          if (!exists) {
+            msgs.insert(0, msg);
+            changed = true;
+          }
+        } else if (change.type == DocumentChangeType.modified) {
+          final existingIdx = msgs.indexWhere((m) => m.id == msg.id);
+          if (existingIdx >= 0) {
+            msgs[existingIdx] = msg;
+            changed = true;
+          }
+        }
+        if (changed) _messages[convId] = msgs;
+      }
+      if (changed) {
+        // Sắp xếp lại: newest first (index 0) để ListView reverse hiển thị đúng
+        _messages[convId]?.sort((a, b) {
+          final ta = a.createdAt ?? DateTime(2000);
+          final tb = b.createdAt ?? DateTime(2000);
+          return tb.compareTo(ta); // descending
+        });
+        notifyListeners();
+      }
+    }, onError: (e) {
+      debugPrint('[ChatProvider] Messages Firestore error ($convId): $e');
+    });
+    _messagesSubscriptions[convId] = sub;
+  }
+
+  /// Dừng lắng nghe tin nhắn khi rời màn hình chat
+  void stopMessagesListener(String convId) {
+    _messagesSubscriptions[convId]?.cancel();
+    _messagesSubscriptions.remove(convId);
+  }
+
+  /// Dừng tất cả listeners (khi logout)
+  void stopAllListeners() {
+    _conversationsSubscription?.cancel();
+    _conversationsSubscription = null;
+    for (final sub in _messagesSubscriptions.values) {
+      sub.cancel();
+    }
+    _messagesSubscriptions.clear();
+  }
+
+  // ── Firestore helpers ───────────────────────────────────────────────────────
+
+  static Map<String, dynamic> _firestoreToMessageMap(
+      String docId, Map<String, dynamic> data) {
+    return {
+      '_id': data['_id'] ?? docId,
+      'conv_id': data['conv_id'] ?? '',
+      'sender_id': data['sender_id'] ?? '',
+      'content': data['content'] ?? '',
+      'message_type': data['message_type'] ?? 'text',
+      'media_urls': data['media_urls'],
+      'file_url': data['file_url'],
+      'file_name': data['file_name'],
+      'file_size': data['file_size'],
+      'is_recalled': data['is_recalled'] ?? false,
+      'is_edited': data['is_edited'] ?? false,
+      'reply_to_id': data['reply_to_id'],
+      'reply_to_info': data['reply_to'],
+      'shared_post_id': data['shared_post_id'],
+      'shared_post_info': data['shared_post_info'],
+      'sender_info': data['sender_info'],
+      'created_at': _tsToIso(data['created_at']),
+      'edited_at': _tsToIso(data['edited_at']),
+      'recalled_at': _tsToIso(data['recalled_at']),
+    };
+  }
+
+  static String? _tsToIso(dynamic ts) {
+    if (ts == null) return null;
+    if (ts is Timestamp) return ts.toDate().toIso8601String();
+    return ts.toString();
   }
 }

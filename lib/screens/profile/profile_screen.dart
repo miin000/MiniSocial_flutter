@@ -137,7 +137,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       size: 60,
                                       color: Colors.grey,
                                     ),
-                                    cacheKey: user.avatar! + DateTime.now().millisecondsSinceEpoch.toString(), 
+                                    cacheKey: user.avatar!,
                                   ),
                                 )
                               : Text(
@@ -178,6 +178,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _buildInfoRow(Icons.location_on_outlined, user.location!)
                         else
                           _buildInfoRow(Icons.location_on_outlined, 'Chưa có vị trí'),
+
+                        if (user.phone != null && user.phone!.isNotEmpty)
+                          _buildInfoRow(Icons.phone_outlined, user.phone!),
+
+                        if (user.gender != null && user.gender!.isNotEmpty)
+                          _buildInfoRow(
+                            Icons.wc_outlined,
+                            user.gender == 'male' ? 'Nam' : user.gender == 'female' ? 'Nữ' : 'Khác',
+                          ),
+
+                        if (user.birthdate != null)
+                          _buildInfoRow(
+                            Icons.cake_outlined,
+                            '${user.birthdate!.day.toString().padLeft(2, '0')}/${user.birthdate!.month.toString().padLeft(2, '0')}/${user.birthdate!.year}',
+                          ),
 
                         if (user.createdAt != null)
                           _buildInfoRow(
