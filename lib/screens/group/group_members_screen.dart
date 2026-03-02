@@ -73,17 +73,33 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
             orElse: () => MemberRole.member,
           );
 
+          // Determine if current user is owner or admin
+          final isCurrentUserOwner = widget.isCurrentUserOwner;
+          final isCurrentUserAdmin = groupProvider.isCurrentUserAdmin;
+          final memberUserId = (member['userId'] ?? member['user_id'] ?? member['id'] ?? member['user']?['_id'] ?? '').toString();
+          final isSelf = memberUserId == userId;
+
+          // Permission: who can remove this member
+          bool canRemove = false;
+          if (isCurrentUserOwner && !isSelf && memberRole != MemberRole.owner) {
+            // Owner can remove anyone except themselves and other owners
+            canRemove = true;
+          } else if (isCurrentUserAdmin && !isSelf && memberRole == MemberRole.member) {
+            // Admin can only remove regular members
+            canRemove = true;
+          }
+
           return MemberItem(
             member: member,
             isCurrentUserOwner: widget.isCurrentUserOwner,
-            onRemove: memberRole == MemberRole.owner
-                ? null
-                : () => _showRemoveConfirmation(
+            onRemove: canRemove
+                ? () => _showRemoveConfirmation(
                       context,
                       member['fullName'] ?? member['username'] ?? 'User',
                       member['userId'],
                       groupProvider,
-                    ),
+                    )
+                : null,
             onMakeAdmin: widget.isCurrentUserOwner &&
                     memberRole == MemberRole.member
                 ? () => _makeAdmin(

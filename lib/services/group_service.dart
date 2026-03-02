@@ -204,21 +204,38 @@ class GroupService {
   Future<Map<String, dynamic>> removeMember(String groupId, String userId) async {
     try {
       await _apiService.delete('/groups/$groupId/members/$userId');
-      return {'success': true, 'message': 'Xóa thành viên thành công!'};
+      return {
+        'success': true,
+        'message': 'Xóa thành viên thành công!',
+      };
     } on DioException catch (e) {
       String message = 'Lỗi xóa thành viên';
-      if (e.response?.statusCode == 403) {
-        message = '⚠️ Bạn không có quyền xóa thành viên này.';
-      } else if (e.response?.statusCode == 401) {
+      final status = e.response?.statusCode;
+      final serverMessage = e.response?.data?['message'] as String?;
+
+      if (status == 403) {
+        message = serverMessage ?? '⚠️ Bạn không có quyền xóa thành viên này.';
+      } else if (status == 401) {
         message = '🔐 Phiên hết hạn. Vui lòng đăng nhập lại.';
-      } else if (e.response?.statusCode == 400) {
-        message = '❌ Không thể xóa trưởng nhóm.';
-      } else if (e.response?.data != null && e.response?.data['message'] != null) {
-        message = e.response?.data['message'];
+      } else if (status == 400) {
+        // Lấy message từ server thay vì hardcode
+        message = serverMessage ?? '❌ Yêu cầu không hợp lệ (thành viên không tồn tại hoặc lỗi khác).';
+      } else if (serverMessage != null) {
+        message = serverMessage;
       }
-      return {'success': false, 'message': message, 'statusCode': e.response?.statusCode};
+
+      print('Remove member error - status: $status, message: $message');
+      return {
+        'success': false,
+        'message': message,
+        'statusCode': status,
+      };
     } catch (e) {
-      return {'success': false, 'message': 'Lỗi xóa thành viên: $e'};
+      print('Unexpected remove member error: $e');
+      return {
+        'success': false,
+        'message': 'Lỗi xóa thành viên: $e',
+      };
     }
   }
 

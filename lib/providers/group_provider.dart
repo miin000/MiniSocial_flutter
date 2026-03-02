@@ -238,6 +238,7 @@ class GroupProvider with ChangeNotifier {
       final oldPost = posts[idx];
       final wasLiked = oldPost.isLiked ?? false;
 
+      // Optimistic update - match home feed behavior
       posts[idx] = oldPost.copyWith(
         isLiked: !wasLiked,
         likesCount: wasLiked ? oldPost.likesCount - 1 : oldPost.likesCount + 1,
@@ -245,25 +246,15 @@ class GroupProvider with ChangeNotifier {
       notifyListeners();
 
       try {
-        final response = await _postService.toggleLike(userId: userId, postId: postId);
-
-        if (response.isNotEmpty) {
-          final newIsLiked = response['is_liked'] as bool? ?? !wasLiked;
-          final newCount = response['likes_count'] as int? ?? 
-              (wasLiked ? oldPost.likesCount - 1 : oldPost.likesCount + 1);
-
-          posts[idx] = oldPost.copyWith(
-            isLiked: newIsLiked,
-            likesCount: newCount,
-          );
-        }
-
-        notifyListeners();
+        // Make API call - don't wait for response details, just ensure it succeeds
+        await _postService.toggleLike(userId: userId, postId: postId);
       } catch (e) {
+        // Revert on error - match home feed behavior
         posts[idx] = oldPost;
         _errorMessage = e.toString();
         notifyListeners();
         print('Lỗi toggle like trong group: $e');
+        rethrow;
       }
     } catch (e) {
       _errorMessage = e.toString();

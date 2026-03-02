@@ -871,7 +871,7 @@ class _MembersTab extends StatelessWidget {
     final List<PopupMenuEntry<String>> menuItems = [];
 
     if (userRole == MemberRole.owner) {
-      // Admin (owner) can: promote to mod, demote mod, transfer admin, remove
+      // Group leader (owner) can: promote to mod, demote mod, transfer admin, remove any member
       if (effectiveRole == 'MEMBER') {
         menuItems.add(const PopupMenuItem(value: 'promote_mod', child: ListTile(
           leading: Icon(Icons.shield, color: Colors.blue),
@@ -886,12 +886,16 @@ class _MembersTab extends StatelessWidget {
           dense: true, contentPadding: EdgeInsets.zero,
         )));
       }
+      // Owner can transfer admin and remove members (except other admin/owner)
       if (effectiveRole != 'ADMIN') {
         menuItems.add(const PopupMenuItem(value: 'transfer_admin', child: ListTile(
           leading: Icon(Icons.verified, color: Colors.amber),
           title: Text('Chuyển quyền Trưởng nhóm'),
           dense: true, contentPadding: EdgeInsets.zero,
         )));
+      }
+      // Owner can remove any member except other ADMIN (owner) members
+      if (effectiveRole != 'ADMIN') {
         menuItems.add(const PopupMenuItem(value: 'remove', child: ListTile(
           leading: Icon(Icons.remove_circle, color: Colors.red),
           title: Text('Xóa khỏi nhóm'),
@@ -899,7 +903,7 @@ class _MembersTab extends StatelessWidget {
         )));
       }
     } else if (userRole == MemberRole.admin) {
-      // Moderator can: remove regular members only
+      // Admin (MODERATOR in API) can: remove regular members only (NOT other admins or owner)
       if (effectiveRole == 'MEMBER') {
         menuItems.add(const PopupMenuItem(value: 'remove', child: ListTile(
           leading: Icon(Icons.remove_circle, color: Colors.red),
