@@ -7,26 +7,22 @@ import '../models/group_model.dart';
 class GroupService {
   final ApiService _apiService = ApiService();
 
-  Future<Map<String, dynamic>> createGroup(String name, String description, String? avatar, {String? ownerId}) async {
+  Future<Map<String, dynamic>> createGroup(String name, String description, String? avatar, {String? coverUrl, String? ownerId}) async {
     try {
-      print('🔍 GroupService: Creating group - name: $name');
       final data = {
         'name': name,
         'description': description,
-        'avatar_url': avatar,
+        if (avatar != null) 'avatar_url': avatar,
+        if (coverUrl != null) 'cover_url': coverUrl,
         if (ownerId != null) 'owner_id': ownerId,
       };
       final response = await _apiService.post('/groups', data: data);
-      print('✅ GroupService: Group created successfully');
       return {
         'success': true,
         'message': 'Tạo nhóm thành công!',
         'group': response.data
       };
     } on DioException catch (e) {
-      print('❌ GroupService: DioException creating group: ${e.message} (Status: ${e.response?.statusCode})');
-      print('❌ GroupService: Response data: ${e.response?.data}');
-      
       String message = 'Lỗi tạo nhóm';
       if (e.response?.statusCode == 401) {
         message = '🔐 Phiên hết hạn. Vui lòng đăng nhập lại.';
@@ -47,7 +43,6 @@ class GroupService {
         'error': e.message,
       };
     } catch (e) {
-      print('❌ GroupService: Unexpected error creating group: $e');
       return {
         'success': false,
         'message': 'Lỗi không xác định: ${e.toString()}',
@@ -57,36 +52,16 @@ class GroupService {
 
   Future<Map<String, dynamic>> getGroups() async {
     try {
-      print('🔍 GroupService: Calling API GET /groups');
       final response = await _apiService.get('/groups');
-
-      print('✅ GroupService: Response status code: ${response.statusCode}');
-      print('✅ GroupService: Response data: ${response.data}');
 
       List<dynamic> myGroupsJson = [];
       List<dynamic> suggestedGroupsJson = [];
 
-      // Xử lý cả hai format: object hoặc array
       if (response.data is List) {
-        // API trả về array trực tiếp
-        print('📊 GroupService: Response is List, treating as myGroups');
         myGroupsJson = response.data as List<dynamic>;
       } else if (response.data is Map) {
-        // API trả về object với keys myGroups và suggestedGroups
-        print('📊 GroupService: Response is Map, extracting myGroups and suggestedGroups');
         myGroupsJson = response.data['myGroups'] as List<dynamic>? ?? [];
         suggestedGroupsJson = response.data['suggestedGroups'] as List<dynamic>? ?? [];
-      }
-
-      print('📊 GroupService: myGroupsJson length: ${myGroupsJson.length}');
-      print('📊 GroupService: suggestedGroupsJson length: ${suggestedGroupsJson.length}');
-
-      // In thử 1 item nếu có để kiểm tra cấu trúc
-      if (myGroupsJson.isNotEmpty) {
-        print('📌 GroupService: First myGroup item: ${myGroupsJson.first}');
-      }
-      if (suggestedGroupsJson.isNotEmpty) {
-        print('📌 GroupService: First suggestedGroup item: ${suggestedGroupsJson.first}');
       }
 
       final myGroups = myGroupsJson
@@ -97,16 +72,12 @@ class GroupService {
           .map((g) => GroupModel.fromJson(g as Map<String, dynamic>))
           .toList();
 
-      print('✅ GroupService: Parsed ${myGroups.length} myGroups and ${suggestedGroups.length} suggestedGroups');
-
       return {
         'success': true,
         'myGroups': myGroups,
         'suggestedGroups': suggestedGroups,
       };
     } on DioException catch (e) {
-      print('❌ GroupService: DioException: ${e.message} (Status: ${e.response?.statusCode})');
-      print('❌ GroupService: Response data: ${e.response?.data}');
       
       String message = 'Lỗi khi tải danh sách nhóm (${e.response?.statusCode})';
       if (e.response?.statusCode == 403) {
@@ -123,7 +94,6 @@ class GroupService {
         'statusCode': e.response?.statusCode,
       };
     } catch (e) {
-      print('❌ GroupService: Unexpected error: $e');
       return {
         'success': false,
         'message': 'Lỗi không xác định: ${e.toString()}',
@@ -134,13 +104,16 @@ class GroupService {
   // Get posts of a group (approved or all depending on backend and auth)
   Future<List<dynamic>> getGroupPosts(String groupId, {String? status}) async {
     try {
-      final resp = await _apiService.get('/groups/$groupId/posts${status != null ? '?status=$status' : ''}');
-      return resp.data as List<dynamic>;
+      final query = {'group_id': groupId};
+      if (status != null) {
+        query['status'] = status;
+      }
+      final resp = await _apiService.get('/posts', queryParameters: query);
+      final list = resp.data['posts'] as List<dynamic>? ?? [];
+      return list;
     } on DioException catch (e) {
-      print('❌ GroupService: getGroupPosts error: ${e.message}');
       return [];
     } catch (e) {
-      print('❌ GroupService: getGroupPosts unexpected: $e');
       return [];
     }
   }
@@ -157,10 +130,8 @@ class GroupService {
       final resp = await _apiService.post('/groups/$groupId/posts', data: data);
       return resp.data as Map<String, dynamic>;
     } on DioException catch (e) {
-      print('❌ GroupService: createGroupPost error: ${e.message}');
       return null;
     } catch (e) {
-      print('❌ GroupService: createGroupPost unexpected: $e');
       return null;
     }
   }
@@ -338,12 +309,7 @@ class GroupService {
   Future<Map<String, dynamic>> getGroupDetail(String groupId) async {
     try {
       final response = await _apiService.get('/groups/$groupId');
-
-      // Backend returns { group: {...}, members: [...], userRole: '...', isMember: bool }
       final data = response.data;
-      print('🔍 GroupService getGroupDetail: data keys = ${data is Map ? data.keys.toList() : data.runtimeType}');
-      print('🔍 GroupService getGroupDetail: members = ${data is Map ? data['members']?.runtimeType : "n/a"}, count = ${data is Map && data['members'] is List ? (data['members'] as List).length : 0}');
-
       final groupJson = (data is Map && data['group'] != null)
           ? Map<String, dynamic>.from(data['group'] as Map)
           : (data is Map ? Map<String, dynamic>.from(data as Map) : <String, dynamic>{});
@@ -355,7 +321,6 @@ class GroupService {
       final userRole = data is Map ? (data['userRole']?.toString()) : null;
 
       final group = GroupModel.fromJson(groupJson);
-      // Use Map.from() to safely convert each member from LinkedHashMap to Map<String, dynamic>
       final members = membersRaw
           .map((m) => Map<String, dynamic>.from(m as Map))
           .toList();
@@ -459,9 +424,6 @@ class GroupService {
   }
 
 
-// Thêm hàm cho getGroupDetail, updateGroup, etc. nếu cần
-
-  // Get pending posts for approval (admin/mod only)
   Future<List<dynamic>> getPendingPosts(String groupId) async {
     try {
       final resp = await _apiService.get('/groups/$groupId/posts/pending/list');
@@ -475,7 +437,6 @@ class GroupService {
     }
   }
 
-  // Approve a pending post (admin/mod only)
   Future<Map<String, dynamic>> approvePost(String groupId, String postId) async {
     try {
       await _apiService.post('/groups/$groupId/posts/$postId/approve');

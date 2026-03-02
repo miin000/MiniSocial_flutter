@@ -158,14 +158,28 @@ class _PostCardState extends State<PostCard> {
                 leading: const Icon(Icons.delete, color: Colors.red),
                 title: const Text('Xóa bài viết'),
                 onTap: () async {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // Đóng bottom sheet
+
+                  bool success = false;
+
+                  // Always use PostProvider to delete; it handles global feed logic
                   final postProvider = Provider.of<PostProvider>(context, listen: false);
-                  final success = await postProvider.deletePost(widget.post.id!);
+                  success = await postProvider.deletePost(widget.post.id!);
+                  // also notify group provider about deletion so it can purge caches
+                  final groupProvider = Provider.of<GroupProvider>(context, listen: false);
+                  groupProvider.markPostDeleted(widget.post.id!);
+                  // We still refresh group posts separately below if needed
+
                   if (success && mounted) {
-                    Fluttertoast.showToast(
-                      msg: 'Đã xóa bài viết',
-                      backgroundColor: Colors.green,
-                    );
+                    Fluttertoast.showToast(msg: 'Đã xóa bài viết', backgroundColor: Colors.green);
+                    
+                    // Reload lại danh sách bài trong group (nếu đang ở group detail)
+                    if (widget.post.groupId != null && widget.post.groupId!.isNotEmpty) {
+                      final groupProvider = Provider.of<GroupProvider>(context, listen: false);
+                      await groupProvider.fetchGroupPosts(widget.post.groupId!, refresh: true);
+                    }
+                  } else if (mounted) {
+                    Fluttertoast.showToast(msg: 'Lỗi khi xóa bài viết', backgroundColor: Colors.red);
                   }
                 },
               ),

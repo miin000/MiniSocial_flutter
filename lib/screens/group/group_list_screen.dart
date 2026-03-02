@@ -303,12 +303,12 @@ class _GroupListScreenState extends State<GroupListScreen> {
               child: SizedBox(
                 width: double.infinity,
                 height: 100,
-                child: (group.avatar != null && group.avatar!.isNotEmpty)
+                child: (group.coverUrl != null && group.coverUrl!.isNotEmpty)
                     ? Image.network(
-                  group.avatar!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _avatarFallback(group.name, 100),
-                )
+                        group.coverUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _avatarFallback(group.name, 100),
+                      )
                     : _avatarFallback(group.name, 100),
               ),
             ),

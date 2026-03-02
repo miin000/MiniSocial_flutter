@@ -1,11 +1,15 @@
 ﻿// lib/screens/group/group_settings_screen.dart
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../providers/group_provider.dart';
 import '../../models/group_model.dart';
-import '../../models/group_post_model.dart';
+import '../../services/cloudinary_service.dart';
 
 class GroupSettingsScreen extends StatefulWidget {
   final GroupModel group;
@@ -26,6 +30,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
   late TextEditingController _nameController;
   late TextEditingController _descController;
   bool _isEditing = false;
+
+  // for avatar/cover
+  File? _newAvatar;
+  File? _newCover;
 
   // Approval toggles
   late bool _requireMemberApproval;
@@ -282,7 +290,11 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => setState(() => _isEditing = false),
+                          onPressed: () => setState(() {
+                                _isEditing = false;
+                                _newAvatar = null;
+                                _newCover = null;
+                              }),
                           icon: const Icon(Icons.close_rounded, size: 17),
                           label: const Text('Hủy'),
                           style: OutlinedButton.styleFrom(
@@ -305,8 +317,25 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
                                   backgroundColor: Colors.red);
                               return;
                             }
+
+                            String? avatarUrl;
+                            String? coverUrl;
+                            if (_newAvatar != null) {
+                              avatarUrl = await CloudinaryService().uploadImage(_newAvatar!.path);
+                              if (avatarUrl == null) {
+                                Fluttertoast.showToast(msg: 'Upload avatar thất bại', backgroundColor: Colors.orange);
+                              }
+                            }
+                            if (_newCover != null) {
+                              coverUrl = await CloudinaryService().uploadImage(_newCover!.path);
+                              if (coverUrl == null) {
+                                Fluttertoast.showToast(msg: 'Upload cover thất bại', backgroundColor: Colors.orange);
+                              }
+                            }
+
                             final result = await groupProvider.updateGroupInfo(
-                                group.id, name, desc, group.avatar);
+                                group.id, name, desc, avatarUrl ?? group.avatar,
+                                coverUrl: coverUrl);
                             if (result['success']) {
                               Fluttertoast.showToast(
                                   msg: 'Cập nhật thành công!',
@@ -314,7 +343,11 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
                               setState(() => _isEditing = false);
                               if (mounted) {
                                 Navigator.pop(context,
-                                    widget.group.copyWith(name: name, description: desc));
+                                    widget.group.copyWith(
+                                        name: name,
+                                        description: desc,
+                                        avatar: avatarUrl ?? group.avatar,
+                                        coverUrl: coverUrl ?? group.coverUrl));
                               }
                             } else {
                               Fluttertoast.showToast(

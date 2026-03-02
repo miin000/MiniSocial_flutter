@@ -31,6 +31,7 @@ class PostService {
 
       final posts = (response.data['posts'] as List)
           .map((post) => Post.fromJson(post))
+          .where((post) => post.status != 'deleted')
           .toList();
 
       return {
@@ -51,6 +52,7 @@ class PostService {
       
       final posts = (response.data['posts'] as List)
           .map((post) => Post.fromJson(post))
+          .where((post) => post.status != 'deleted')
           .toList();
       
       return {

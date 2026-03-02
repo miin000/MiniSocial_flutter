@@ -1,10 +1,15 @@
 // lib/screens/group/create_group_screen.dart
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../providers/group_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/cloudinary_service.dart';
 
 class CreateGroupScreen extends StatefulWidget {
   const CreateGroupScreen({super.key});
@@ -17,7 +22,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  String? _avatar;
+  File? _newAvatar;
+  File? _newCover;
   bool _isLoading = false;
 
   @override
@@ -53,11 +59,28 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     try {
       final groupProvider = Provider.of<GroupProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      
+
+      String? avatarUrl;
+      String? coverUrl;
+
+      if (_newAvatar != null) {
+        avatarUrl = await CloudinaryService().uploadImage(_newAvatar!.path);
+        if (avatarUrl == null) {
+          Fluttertoast.showToast(msg: 'Upload avatar thất bại', backgroundColor: Colors.orange);
+        }
+      }
+      if (_newCover != null) {
+        coverUrl = await CloudinaryService().uploadImage(_newCover!.path);
+        if (coverUrl == null) {
+          Fluttertoast.showToast(msg: 'Upload cover thất bại', backgroundColor: Colors.orange);
+        }
+      }
+
       final result = await groupProvider.createGroup(
         _nameController.text.trim(),
         _descController.text.trim(),
-        _avatar,
+        avatarUrl,
+        coverUrl: coverUrl,
         ownerId: authProvider.user?.id,
       );
 
@@ -131,6 +154,73 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                       child: Text(
                         'Bạn sẽ tự động trở thành trưởng nhóm 👑',
                         style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Cover image
+              Stack(
+                children: [
+                  Container(
+                    height: 120,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      image: _newCover != null
+                          ? DecorationImage(image: FileImage(_newCover!), fit: BoxFit.cover)
+                          : null,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: IconButton(
+                      icon: const Icon(Icons.camera_alt, color: Colors.white),
+                      onPressed: _isLoading
+                          ? null
+                          : () async {
+                              final picker = ImagePicker();
+                              final picked = await picker.pickImage(source: ImageSource.gallery);
+                              if (picked != null) {
+                                setState(() => _newCover = File(picked.path));
+                              }
+                            },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Avatar
+              Center(
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 36,
+                      backgroundImage: _newAvatar != null
+                          ? FileImage(_newAvatar!)
+                          : null,
+                      child: _newAvatar == null
+                          ? const Icon(Icons.group, size: 36)
+                          : null,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.camera_alt),
+                        onPressed: _isLoading
+                            ? null
+                            : () async {
+                                final picker = ImagePicker();
+                                final picked = await picker.pickImage(source: ImageSource.gallery);
+                                if (picked != null) {
+                                  setState(() => _newAvatar = File(picked.path));
+                                }
+                              },
                       ),
                     ),
                   ],

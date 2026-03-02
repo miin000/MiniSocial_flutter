@@ -115,6 +115,23 @@ class AuthService {
     }
   }
 
+  Future<void> signInFirebase() async {
+    if (isFirebaseInitialized) {
+    }
+  }
+
+  Future<void> signOutFirebase() async {
+    if (isFirebaseInitialized) {
+      try {
+        await FirebaseAuth.instance.signOut();
+      } catch (e) {
+        if (kDebugMode) {
+          print('Firebase sign out error: $e');
+        }
+      }
+    }
+  }
+
   // Đăng xuất
   Future<void> logout() async {
     await signOutFirebase();
@@ -127,55 +144,25 @@ class AuthService {
     return _apiService.hasToken;
   }
 
-  // Lấy Firebase Custom Token từ backend và sign in Firebase Auth
-  // Để Firestore security rules hoạt động (xác thực user_id)
-  Future<void> signInFirebase() async {
-    if (!isFirebaseInitialized) return;
-    try {
-      final response = await _apiService.get('/auth/firebase-token');
-      final firebaseToken = response.data['firebaseToken'];
-      if (firebaseToken != null) {
-        await FirebaseAuth.instance.signInWithCustomToken(firebaseToken);
-        debugPrint('Firebase Auth signed in successfully');
-      }
-    } catch (e) {
-      // Không block login nếu Firebase Auth fail
-      // Firestore listener sẽ fallback sang REST API
-      debugPrint('Firebase Auth sign-in failed: $e');
-    }
-  }
-
-  // Đăng xuất Firebase Auth
-  Future<void> signOutFirebase() async {
-    if (!isFirebaseInitialized) return;
-    try {
-      await FirebaseAuth.instance.signOut();
-    } catch (e) {
-      debugPrint('Firebase Auth sign-out failed: $e');
-    }
-  }
-
   Future<Map<String, dynamic>> updateProfile(UserModel user) async {
     try {
-      // Use PATCH /users/profile (no user ID in URL) with backend field names
-      final data = <String, dynamic>{};
-      if (user.fullName != null) data['full_name'] = user.fullName;
-      if (user.bio != null) data['bio'] = user.bio;
-      if (user.job != null) data['job'] = user.job;
-      if (user.location != null) data['location'] = user.location;
-      if (user.avatar != null) data['avatar_url'] = user.avatar;
-      if (user.cover != null) data['cover_url'] = user.cover;
-
-      final response = await _apiService.patch('/users/profile', data: data);
-      return {'success': true, 'user': UserModel.fromJson(response.data)};
+      final sendData = {
+        if (user.fullName != null && user.fullName!.isNotEmpty) 'full_name': user.fullName,
+        if (user.bio != null && user.bio!.isNotEmpty) 'bio': user.bio,
+        if (user.job != null && user.job!.isNotEmpty) 'job': user.job,
+        if (user.location != null && user.location!.isNotEmpty) 'location': user.location,
+        if (user.avatar != null && user.avatar!.isNotEmpty) 'avatar_url': user.avatar,
+        if (user.cover != null && user.cover!.isNotEmpty) 'cover_url': user.cover,
+      };
+      
+      final response = await _apiService.patch('/users/profile', data: sendData);
+      final updatedUser = UserModel.fromJson(response.data);
+      return {'success': true, 'user': updatedUser};
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       final message = e.response?.data?['message'] ?? 'Lỗi server';
-      print('ERROR updateProfile: $status - $message');
-      print('ERROR full response: ${e.response?.data}');
       return {'success': false, 'message': message};
     } catch (e) {
-      print('ERROR updateProfile general: $e');
       return {'success': false, 'message': 'Lỗi: $e'};
     }
   }

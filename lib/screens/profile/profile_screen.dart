@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
 import '../home/post_card.dart';
@@ -35,7 +36,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       await authProvider.checkAuthStatus();
-      print('DEBUG Profile: Reload user thành công - bio: ${authProvider.user?.bio}, job: ${authProvider.user?.job}, location: ${authProvider.user?.location}');
 
       // Load bài viết của chính mình
       final currentUserId = authProvider.user?.id;
@@ -44,11 +44,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         final myPosts = postProvider.posts.where((post) => post.userId == currentUserId).toList();
         postProvider.setPostsForProfile(myPosts);
-
-        print('DEBUG Profile: Sau lọc còn ${myPosts.length} bài của chính mình');
       }
     } catch (e) {
-      print('ERROR Profile reload: $e');
       Fluttertoast.showToast(msg: 'Lỗi tải hồ sơ', backgroundColor: Colors.red);
     } finally {
       if (mounted) {
@@ -123,15 +120,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
+                        // Trong ProfileScreen → phần CircleAvatar
                         CircleAvatar(
                           radius: 60,
-                          backgroundImage: user.avatar != null ? NetworkImage(user.avatar!) : null,
-                          child: user.avatar == null
-                              ? Text(
-                            user.fullName?[0] ?? user.username?[0] ?? 'U',
-                            style: const TextStyle(fontSize: 48, color: Colors.white),
-                          )
-                              : null,
+                          backgroundColor: Colors.grey[300], 
+                          child: user.avatar != null && user.avatar!.isNotEmpty
+                              ? ClipOval(
+                                  child: CachedNetworkImage(  
+                                    imageUrl: user.avatar!,
+                                    width: 120,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => const CircularProgressIndicator(),
+                                    errorWidget: (context, url, error) => const Icon(
+                                      Icons.person,
+                                      size: 60,
+                                      color: Colors.grey,
+                                    ),
+                                    cacheKey: user.avatar! + DateTime.now().millisecondsSinceEpoch.toString(), 
+                                  ),
+                                )
+                              : Text(
+                                  user.fullName?[0]?.toUpperCase() ?? user.username?[0]?.toUpperCase() ?? 'U',
+                                  style: const TextStyle(fontSize: 48, color: Colors.white),
+                                ),
                         ),
                         const SizedBox(height: 12),
 
@@ -198,16 +210,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               );
 
                               if (result == true && mounted) {
-                                print('DEBUG Profile: Reload sau khi chỉnh sửa');
-                                final auth = Provider.of<AuthProvider>(context, listen: false);
-
-                                // Reload user từ local + API
-                                await auth.checkAuthStatus();
-
                                 // Reload posts của mình
                                 await _reloadProfile();
-
-                                // Force rebuild UI
                                 setState(() {});
 
                                 Fluttertoast.showToast(msg: 'Đã cập nhật hồ sơ!', backgroundColor: Colors.green);
@@ -231,28 +235,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
           body: _isLoading && postProvider.posts.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : postProvider.posts.isEmpty
-              ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.article_outlined, size: 80, color: Colors.grey[400]),
-                const SizedBox(height: 16),
-                const Text(
-                  'Bạn chưa có bài viết nào',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.grey),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Hãy tạo bài viết đầu tiên!',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
-            ),
-          )
+              ? SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.article_outlined, size: 80, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Bạn chưa có bài viết nào',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Hãy tạo bài viết đầu tiên!',
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : ListView.builder(
-            itemCount: postProvider.posts.length,
-            itemBuilder: (context, index) => PostCard(post: postProvider.posts[index]),
-          ),
+                  itemCount: postProvider.posts.length,
+                  itemBuilder: (context, index) => PostCard(post: postProvider.posts[index]),
+                ),
         ),
       ),
     );

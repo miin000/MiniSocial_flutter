@@ -50,7 +50,23 @@ class GroupProvider with ChangeNotifier {
   bool get isCurrentUserAdminOrModerator =>
       isCurrentUserAdmin || isCurrentUserModerator;
 
-  List<Post> getGroupPosts(String groupId) => _groupPosts[groupId] ?? [];
+  final Set<String> _deletedPostIds = {};
+
+  List<Post> getGroupPosts(String groupId) {
+    final list = _groupPosts[groupId] ?? [];
+    return list.where((p) => !_deletedPostIds.contains(p.id)).toList();
+  }
+
+  void markPostDeleted(String postId) {
+    if (postId.isNotEmpty) {
+      _deletedPostIds.add(postId);
+      _groupPosts.forEach((key, list) {
+        list.removeWhere((p) => p.id == postId);
+      });
+      _pendingPosts.removeWhere((p) => p.id == postId);
+      notifyListeners();
+    }
+  }
 
   Future<void> fetchGroups({
     AuthProvider? authProvider,
@@ -87,6 +103,7 @@ class GroupProvider with ChangeNotifier {
       String name,
       String description,
       String? avatar, {
+        String? coverUrl,
         String? ownerId,
       }) async {
     _isLoading = true;
@@ -96,6 +113,7 @@ class GroupProvider with ChangeNotifier {
       name,
       description,
       avatar,
+      coverUrl: coverUrl,
       ownerId: ownerId,
     );
 
@@ -140,26 +158,11 @@ class GroupProvider with ChangeNotifier {
       if (result['posts'] != null && result['posts'] is List) {
         final posts = (result['posts'] as List)
             .map((p) => Post.fromJson(p as Map<String, dynamic>))
+            .where((post) => post.status != 'deleted')
             .toList();
         _groupPosts[groupId] = posts;
-      } else if (_currentGroup != null && _currentGroup!.posts.isNotEmpty) {
-        final gp = _currentGroup!;
-        final posts = gp.posts.map((gpost) {
-          return Post(
-            id: gpost.id,
-            userId: gpost.authorId,
-            content: gpost.content,
-            createdAt: gpost.createdAt,
-            likesCount: 0,
-            commentsCount: 0,
-            sharesCount: 0,
-            mediaUrls: null,
-            contentType: null,
-            userName: null,
-            userAvatar: null,
-          );
-        }).toList();
-        _groupPosts[groupId] = posts;
+      } else {
+        _groupPosts[groupId] = [];
       }
 
       _errorMessage = null;
@@ -172,40 +175,47 @@ class GroupProvider with ChangeNotifier {
   }
 
   Future<void> fetchGroupPosts(String groupId, {bool refresh = false}) async {
-    _isLoadingPosts = true;
-    notifyListeners();
+  _isLoadingPosts = true;
+  notifyListeners();
 
-    try {
-      final raw = await _groupService.getGroupPosts(groupId);
-      final newPostsFromServer = raw.map((p) => Post.fromJson(p as Map<String, dynamic>)).toList();
-      final existingPosts = _groupPosts[groupId] ?? <Post>[];
-      final existingMap = {for (var p in existingPosts) p.id!: p};
-      final mergedPosts = newPostsFromServer.map((serverPost) {
-        final existing = existingMap[serverPost.id];
-        if (existing != null) {
-          return serverPost.copyWith(
-            isLiked: serverPost.isLiked ?? existing.isLiked,
-          );
-        }
-        return serverPost;
-      }).toList();
+  try {
+    final raw = await _groupService.getGroupPosts(groupId);
+    final newPostsFromServer = raw
+        .map((p) => Post.fromJson(p as Map<String, dynamic>))
+        .where((post) => post.status != 'deleted')
+        .toList();
 
-      if (refresh || !_groupPosts.containsKey(groupId)) {
-        _groupPosts[groupId] = mergedPosts;
-      } else {
-        _groupPosts[groupId] = mergedPosts;
+    final existingPosts = _groupPosts[groupId] ?? <Post>[];
+    final existingMap = {for (var p in existingPosts) p.id!: p};
+
+    // Merge: giữ isLiked cũ nếu server không trả
+    final mergedPosts = newPostsFromServer.map((serverPost) {
+      final existing = existingMap[serverPost.id];
+      if (existing != null) {
+        return serverPost.copyWith(
+          isLiked: serverPost.isLiked ?? existing.isLiked,  // ← Giữ trạng thái cũ nếu server không trả
+          likesCount: serverPost.likesCount, // ưu tiên server
+        );
       }
+      return serverPost;
+    }).toList();
 
-      notifyListeners();
-    } catch (e) {
-      print('Lỗi fetch group posts: $e');
-      _errorMessage = 'Không thể tải bài viết nhóm: $e';
-      notifyListeners();
-    } finally {
-      _isLoadingPosts = false;
-      notifyListeners();
+    if (refresh || !_groupPosts.containsKey(groupId)) {
+      _groupPosts[groupId] = mergedPosts;
+    } else {
+      _groupPosts[groupId] = mergedPosts;
     }
+
+    notifyListeners();
+  } catch (e) {
+    print('Lỗi fetch group posts: $e');
+    _errorMessage = 'Không thể tải bài viết nhóm: $e';
+    notifyListeners();
+  } finally {
+    _isLoadingPosts = false;
+    notifyListeners();
   }
+}
 
   void addPostToGroup(String groupId, Post newPost) {
     _groupPosts.putIfAbsent(groupId, () => []);
@@ -225,22 +235,35 @@ class GroupProvider with ChangeNotifier {
       final idx = posts.indexWhere((p) => p.id == postId);
       if (idx == -1) return;
 
-      final post = posts[idx];
-      final isLiked = post.isLiked ?? false;
+      final oldPost = posts[idx];
+      final wasLiked = oldPost.isLiked ?? false;
 
-      final oldPost = post;
-      posts[idx] = post.copyWith(
-        isLiked: !isLiked,
-        likesCount: isLiked ? post.likesCount - 1 : post.likesCount + 1,
+      posts[idx] = oldPost.copyWith(
+        isLiked: !wasLiked,
+        likesCount: wasLiked ? oldPost.likesCount - 1 : oldPost.likesCount + 1,
       );
       notifyListeners();
 
       try {
-        await _postService.toggleLike(userId: userId, postId: postId);
+        final response = await _postService.toggleLike(userId: userId, postId: postId);
+
+        if (response.isNotEmpty) {
+          final newIsLiked = response['is_liked'] as bool? ?? !wasLiked;
+          final newCount = response['likes_count'] as int? ?? 
+              (wasLiked ? oldPost.likesCount - 1 : oldPost.likesCount + 1);
+
+          posts[idx] = oldPost.copyWith(
+            isLiked: newIsLiked,
+            likesCount: newCount,
+          );
+        }
+
+        notifyListeners();
       } catch (e) {
         posts[idx] = oldPost;
         _errorMessage = e.toString();
         notifyListeners();
+        print('Lỗi toggle like trong group: $e');
       }
     } catch (e) {
       _errorMessage = e.toString();
@@ -313,7 +336,6 @@ class GroupProvider with ChangeNotifier {
       final isPending = result['isPending'] == true;
       
       if (!isPending) {
-        // Auto-approved: add to active members
         if (uid.isNotEmpty) {
           _groupMembers.add({
             'userId': uid,
@@ -324,20 +346,16 @@ class GroupProvider with ChangeNotifier {
             'joined_at': DateTime.now().toIso8601String(),
           });
         }
-        // Update member count
         if (_currentGroup != null) {
           _currentGroup = _currentGroup!.copyWith(memberCount: _currentGroup!.memberCount + 1);
         }
-        // Set role
         _currentUserRole = 'MEMBER';
-        // Move from suggested to myGroups
         final groupIndex = _suggestedGroups.indexWhere((g) => g.id == groupId);
         if (groupIndex != -1) {
           final groupToAdd = _suggestedGroups.removeAt(groupIndex);
           _myGroups.insert(0, groupToAdd.copyWith(memberCount: groupToAdd.memberCount + 1, isJoined: true));
         }
       }
-      // If pending, do NOT add to active members — user must wait for approval
       
       notifyListeners();
     }
@@ -351,7 +369,6 @@ class GroupProvider with ChangeNotifier {
     if (result['success']) {
       final uid = currentUserId ?? '';
 
-      // Clear role immediately so callers know user is no longer a member
       _currentUserRole = null;
 
       _groupMembers.removeWhere((m) {
@@ -496,9 +513,11 @@ class GroupProvider with ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> updateGroupInfo(
-      String groupId, String name, String description, String? avatar) async {
+      String groupId, String name, String description, String? avatar,
+      {String? coverUrl}) async {
     final result =
-    await _groupService.updateGroup(groupId, name, description, avatar);
+        await _groupService.updateGroup(groupId, name, description, avatar,
+            coverUrl: coverUrl);
     if (result['success']) await fetchGroupDetail(groupId);
     return result;
   }
@@ -511,7 +530,10 @@ class GroupProvider with ChangeNotifier {
 
     try {
       final raw = await _groupService.getPendingPosts(groupId);
-      _pendingPosts = raw.map((p) => Post.fromJson(p as Map<String, dynamic>)).toList();
+      _pendingPosts = raw
+          .map((p) => Post.fromJson(p as Map<String, dynamic>))
+          .where((post) => post.status != 'deleted')
+          .toList();
     } catch (e) {
       print('fetchPendingPosts error: $e');
       _pendingPosts = [];
@@ -546,6 +568,26 @@ class GroupProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> deleteGroupPost(String groupId, String postId) async {
+    try {
+      _deletedPostIds.add(postId);
+      if (_groupPosts.containsKey(groupId)) {
+        _groupPosts[groupId]!.removeWhere((post) => post.id == postId);
+      }
+      _pendingPosts.removeWhere((post) => post.id == postId);
+      notifyListeners();
+
+      // call API
+      await _postService.deletePost(postId);
+      return true;
+    } catch (e) {
+      print('ERROR deleteGroupPost: $e');
+      _errorMessage = 'Lỗi xóa bài viết: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
   // Clear data khi logout hoặc cần reset
   void clear() {
     _myGroups = [];
@@ -556,6 +598,7 @@ class GroupProvider with ChangeNotifier {
     _pendingPosts = [];
     _currentUserRole = null;
     _groupPosts.clear();
+    _deletedPostIds.clear();
     _errorMessage = null;
     notifyListeners();
   }

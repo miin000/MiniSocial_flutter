@@ -32,9 +32,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _bioController.text = user.bio ?? '';
       _jobController.text = user.job ?? '';
       _locationController.text = user.location ?? '';
-      print('DEBUG EditProfile: Load user thành công - bio: ${user.bio}, job: ${user.job}, location: ${user.location}');
     } else {
-      print('ERROR EditProfile: user null khi init');
       Fluttertoast.showToast(msg: 'Không tìm thấy thông tin người dùng', backgroundColor: Colors.red);
     }
   }
@@ -104,16 +102,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         cover: newCoverUrl ?? user.cover,
       );
 
-      print('DEBUG EditProfile: Fake cập nhật local với data: ${updatedUser.toJson()}');
-
-      Fluttertoast.showToast(
-        msg: 'Đã cập nhật thông tin (tạm thời trên thiết bị - backend chưa hỗ trợ)',
-        backgroundColor: Colors.orange,
-        toastLength: Toast.LENGTH_LONG,
-      );
-
-      if (mounted) {
-        Navigator.pop(context, true); // Quay lại profile và reload
+      // Gửi lên server
+      final result = await authProvider.updateProfile(updatedUser);
+      if (result['success'] == true) {
+        Fluttertoast.showToast(
+          msg: 'Cập nhật hồ sơ thành công!',
+          backgroundColor: Colors.green,
+        );
+        if (mounted) Navigator.pop(context, true);
+      } else {
+        Fluttertoast.showToast(
+          msg: result['message'] ?? 'Không thể cập nhật',
+          backgroundColor: Colors.red,
+        );
+        // vẫn cập nhật local để hiển thị tạm
+        await authProvider.updateLocalUser(updatedUser);
       }
     } catch (e) {
       Fluttertoast.showToast(msg: 'Lỗi: $e', backgroundColor: Colors.red);

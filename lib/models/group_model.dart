@@ -152,6 +152,7 @@ class GroupModel {
       'name': name,
       'description': description,
       'avatar_url': avatar,
+      'cover_url': coverUrl,
     };
   }
 

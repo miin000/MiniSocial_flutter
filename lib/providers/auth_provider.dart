@@ -46,31 +46,38 @@ class AuthProvider with ChangeNotifier {
       final token = prefs.getString('auth_token');
       final userJson = prefs.getString('user_data');
 
-      // Ưu tiên load user từ local trước (fake update sẽ được giữ)
+      // Ưu tiên load user từ local trước
       if (userJson != null) {
         _user = UserModel.fromJson(jsonDecode(userJson));
-        print('DEBUG AuthProvider: Load user từ local SharedPreferences - bio: ${_user?.bio}, job: ${_user?.job}, location: ${_user?.location}');
       }
 
       if (token != null && userJson != null) {
         _token = token;
 
-        // Verify token với API (nếu fail thì giữ local user)
+        // Lấy dữ liệu mới từ API
         final result = await _authService.getMe();
         if (result['success']) {
-          _user = result['user'];
+          final apiUser = result['user'] as UserModel;
+          
+          _user = _user!.copyWith(
+            fullName: apiUser.fullName ?? _user!.fullName,
+            bio: apiUser.bio ?? _user!.bio,
+            job: apiUser.job ?? _user!.job,
+            location: apiUser.location ?? _user!.location,
+            avatar: apiUser.avatar ?? _user!.avatar,
+            cover: apiUser.cover ?? _user!.cover,
+            rolesAdmin: apiUser.rolesAdmin ?? _user!.rolesAdmin,
+            rolesGroup: apiUser.rolesGroup ?? _user!.rolesGroup,
+          );
+          
           await _saveUserData(_user!);
-          // Sign in Firebase Auth cho Firestore rules
-          await _authService.signInFirebase();
-        } else {
-          print('DEBUG AuthProvider: Verify API fail, giữ user local');
         }
         _status = AuthStatus.authenticated;
+
       } else {
         _status = AuthStatus.unauthenticated;
       }
     } catch (e) {
-      print('ERROR in checkAuthStatus: $e');
       _status = AuthStatus.unauthenticated;
     }
 
@@ -84,13 +91,35 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     final result = await _authService.login(identifier, password);
-
     if (result['success']) {
-      _user = result['user'];
-      _token = result['token'];
+      final serverUser = result['user'] as UserModel;
+      _token = result['token'] as String?;
+
+      // Merge with any locally saved user edits for the same user id
+      final prefs = await SharedPreferences.getInstance();
+      final savedUserJson = prefs.getString('user_data');
+      UserModel mergedUser = serverUser;
+      if (savedUserJson != null) {
+        try {
+          final localMap = jsonDecode(savedUserJson) as Map<String, dynamic>;
+          final serverMap = serverUser.toJson();
+          if (localMap['id'] == serverMap['id']) {
+            // prefer non-null local values to preserve local edits
+            localMap.forEach((k, v) {
+              if (v != null) serverMap[k] = v;
+            });
+            mergedUser = UserModel.fromJson(serverMap);
+          }
+        } catch (e) {
+          // ignore json/merge errors and fall back to server user
+        }
+      }
+
+      _user = mergedUser;
       _status = AuthStatus.authenticated;
 
-      // Lưu user data
+      // Save token and merged user data
+      if (_token != null) await prefs.setString('auth_token', _token!);
       await _saveUserData(_user!);
 
       // Sign in Firebase Auth cho Firestore rules
@@ -136,7 +165,7 @@ class AuthProvider with ChangeNotifier {
   Future<Map<String, dynamic>> updateProfile(UserModel updatedUser) async {
     final result = await _authService.updateProfile(updatedUser);
     if (result['success']) {
-      _user = result['user'];
+      _user = result['user'] as UserModel;  
       await _saveUserData(_user!);
       notifyListeners();
     }
@@ -188,7 +217,8 @@ class AuthProvider with ChangeNotifier {
   // Xóa user data
   Future<void> _clearUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('user_data');
+    // Keep locally edited `user_data` so profile changes persist across logout/login.
+    // Only remove the auth token on logout.
     await prefs.remove('auth_token');
   }
 
@@ -199,11 +229,10 @@ class AuthProvider with ChangeNotifier {
   }
 
   // Thêm method này để cập nhật user cục bộ (fake khi backend chưa hỗ trợ)
-  void updateLocalUser(UserModel updatedUser) {
+  Future<void> updateLocalUser(UserModel updatedUser) async {
     _user = updatedUser;
     // Lưu lại vào SharedPreferences để giữ khi reload app
-    _saveUserData(updatedUser);
+    await _saveUserData(updatedUser);
     notifyListeners();
-    print('DEBUG AuthProvider: Đã cập nhật local user thành công - bio: ${updatedUser.bio}, job: ${updatedUser.job}, location: ${updatedUser.location}');
   }
 }
