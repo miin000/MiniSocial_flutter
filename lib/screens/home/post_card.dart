@@ -297,11 +297,7 @@ class _PostCardState extends State<PostCard> {
                             size: 13,
                             color: Colors.grey,
                           ),
-                          if (widget.post.updatedAt != null &&
-                              widget.post.createdAt != null &&
-                              widget.post.updatedAt!.isAfter(
-                                widget.post.createdAt!.add(const Duration(seconds: 5)),
-                              )) ...
+                          if (widget.post.isEdited) ...
                             [
                               const SizedBox(width: 4),
                               Text(
@@ -448,9 +444,20 @@ class _PostCardState extends State<PostCard> {
                   '${widget.post.likesCount} lượt thích',
                   style: const TextStyle(color: Colors.grey),
                 ),
-                Text(
-                  '${widget.post.commentsCount} bình luận',
-                  style: const TextStyle(color: Colors.grey),
+                Row(
+                  children: [
+                    Text(
+                      '${widget.post.commentsCount} bình luận',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                    if (widget.post.sharesCount > 0) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '${widget.post.sharesCount} chia sẻ',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),

@@ -15,6 +15,7 @@ import 'providers/post_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/friend_provider.dart';
+import 'providers/recommendation_provider.dart';
 
 // Screens
 import 'screens/splash/splash_screen.dart';
@@ -101,6 +102,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => FriendProvider()),
+        ChangeNotifierProvider(create: (_) => RecommendationProvider()),
       ],
       child: MaterialApp(
         title: 'MiniSocial',

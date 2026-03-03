@@ -78,7 +78,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
       // Only fetch posts if user is a member — backend returns 403 for non-members
       if (joined) {
-        await gp.fetchGroupPosts(group.id, refresh: true);
+        await gp.fetchGroupPosts(group.id, refresh: true, userId: currentUserId.isNotEmpty ? currentUserId : null);
       }
 
       if (mounted) {
@@ -106,10 +106,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         ? widget.currentUserId
         : (authProvider.user?.id ?? '');
 
-    final isOwner = gp.isCurrentUserAdmin ||
-        (currentGroup.ownerId != null &&
-            currentUserId.isNotEmpty &&
-            currentGroup.ownerId.toString() == currentUserId);
+    // isOwner = pure role-based, backend không update ownerId khi transfer-admin
+    final isOwner = gp.isCurrentUserAdmin;
 
     // Use provider's currentUserRole (from API) instead of getUserRole (empty members list)
     final userRole = _mapApiRoleToMemberRole(gp.currentUserRole, isOwner);
@@ -419,8 +417,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         : (Provider.of<AuthProvider>(context, listen: false).user?.id ?? '');
 
     // Check if user is admin - must transfer admin first
-    final isAdmin = gp.isCurrentUserAdmin ||
-        (gp.currentGroup?.ownerId != null && gp.currentGroup!.ownerId == currentUserId);
+    // Không dùng ownerId vì backend không update ownerId khi transfer
+    final isAdmin = gp.isCurrentUserAdmin;
 
     if (isAdmin) {
       _showTransferAdminBeforeLeave(context);
@@ -564,6 +562,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                         final transferRes = await gp.transferOwnership(group.id, memberId);
                         if (transferRes['success']) {
                           Fluttertoast.showToast(msg: 'Đã chuyển quyền cho $name', backgroundColor: Colors.green);
+                          // Cập nhật local state: user không còn là admin nữa
+                          gp.setCurrentUserRole('MODERATOR');
+                          // Rời nhóm — bỏ qua kiểm tra admin vì đã chuyển quyền
                           await _performLeaveGroup();
                         } else {
                           Fluttertoast.showToast(
@@ -811,10 +812,10 @@ class _MembersTab extends StatelessWidget {
         final String roleRaw =
         (m['role']?.toString().toUpperCase() ?? 'MEMBER');
 
-        // Check creator via ownerId fallback
-        final bool isCreator = memberId.isNotEmpty &&
-            memberId == current.ownerId;
-        final effectiveRole = isCreator ? 'ADMIN' : roleRaw;
+        // Display purely based on role from backend.
+        // Backend: ADMIN = trưởng nhóm hiện tại, MODERATOR = QTV.
+        // ownerId không được dùng vì backend không update nó khi transfer-admin.
+        final effectiveRole = roleRaw;
 
         final (String roleLabel, Color roleColor, IconData roleIcon) =
         switch (effectiveRole) {
@@ -958,6 +959,9 @@ class _MembersTab extends StatelessWidget {
             onPressed: () async {
               Navigator.pop(context);
               final res = await gp.transferOwnership(current.id, memberId);
+              if (res['success']) {
+                gp.setCurrentUserRole('MODERATOR');
+              }
               Fluttertoast.showToast(
                 msg: res['success'] ? 'Đã chuyển quyền cho $name' : (res['message'] ?? 'Lỗi'),
                 backgroundColor: res['success'] ? Colors.green : Colors.red,

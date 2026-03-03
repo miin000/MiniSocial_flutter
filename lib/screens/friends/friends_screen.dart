@@ -118,54 +118,78 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
 
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
-                  child: ListTile(
-                    leading: _buildAvatar(avatar, name),
-                    title: Text(name),
-                    subtitle: Text('$mutual bạn chung'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
                       children: [
-                        ElevatedButton(
-                          onPressed: () async {
-                            final friendId = (item['id'] ?? item['_id'] ?? item['userId'])?.toString() ?? '';
-                            if (friendId.isEmpty) return;
-                            final chatProvider = context.read<ChatProvider>();
-                            final conv = await chatProvider.createPrivateChat(friendId);
-                            if (conv != null && mounted) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ChatDetailScreen(conversation: conv),
-                                ),
-                              );
-                            } else {
-                              Fluttertoast.showToast(msg: chatProvider.error ?? 'Không thể mở chat');
-                            }
-                          },
-                          child: const Text('Nhắn tin'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF3b82f6),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: () async {
-                            final res = await _friendService.removeFriend(item['id'] ?? item['_id'] ?? item['userId']);
-                            if (res['success']) {
-                              Fluttertoast.showToast(msg: 'Đã hủy kết bạn');
-                              _loadAll();
-                            } else {
-                              Fluttertoast.showToast(msg: res['message'] ?? 'Lỗi');
-                            }
-                          },
-                          child: const Text('Hủy kết bạn'),
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        _buildAvatar(avatar, name),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text('$mutual bạn chung', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: ElevatedButton(
+                                      onPressed: () async {
+                                        final friendId = (item['id'] ?? item['_id'] ?? item['userId'])?.toString() ?? '';
+                                        if (friendId.isEmpty) return;
+                                        final chatProvider = context.read<ChatProvider>();
+                                        final conv = await chatProvider.createPrivateChat(friendId);
+                                        if (conv != null && mounted) {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => ChatDetailScreen(conversation: conv),
+                                            ),
+                                          );
+                                        } else {
+                                          Fluttertoast.showToast(msg: chatProvider.error ?? 'Không thể mở chat');
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF3b82f6),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                      ),
+                                      child: const Text('Nhắn tin'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: OutlinedButton(
+                                      onPressed: () async {
+                                        final res = await _friendService.removeFriend(item['id'] ?? item['_id'] ?? item['userId']);
+                                        if (res['success']) {
+                                          Fluttertoast.showToast(msg: 'Đã hủy kết bạn');
+                                          _loadAll();
+                                        } else {
+                                          Fluttertoast.showToast(msg: res['message'] ?? 'Lỗi');
+                                        }
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                      ),
+                                      child: const Text('Hủy kết bạn'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ],

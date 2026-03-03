@@ -733,6 +733,7 @@ class _MessageBubble extends StatelessWidget {
 
   String _formatMsgTime(DateTime? time) {
     if (time == null) return '';
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    final local = time.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 }

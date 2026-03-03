@@ -22,6 +22,7 @@ class Post {
   final DateTime? approvedAt;
   final String? rejectedReason;
   final List<String> tags;
+  final bool isEdited;
 
   Post({
     this.id,
@@ -45,6 +46,7 @@ class Post {
     this.approvedAt,
     this.rejectedReason,
     this.tags = const [],
+    this.isEdited = false,
   });
 
   bool get isGroupPost => groupId != null && groupId!.isNotEmpty;
@@ -82,6 +84,7 @@ class Post {
       tags: json['tags'] != null
           ? List<String>.from(json['tags'])
           : [],
+      isEdited: json['is_edited'] as bool? ?? false,
     );
   }
 
@@ -122,6 +125,7 @@ class Post {
     bool? isLiked,
     String? groupId,
     List<String>? tags,
+    bool? isEdited,
   }) {
     return Post(
       id: id ?? this.id,
@@ -141,6 +145,7 @@ class Post {
       isLiked: isLiked ?? this.isLiked,
       groupId: groupId ?? this.groupId,
       tags: tags ?? this.tags,
+      isEdited: isEdited ?? this.isEdited,
     );
   }
 }

@@ -102,12 +102,11 @@ class GroupService {
   }
 
   // Get posts of a group (approved or all depending on backend and auth)
-  Future<List<dynamic>> getGroupPosts(String groupId, {String? status}) async {
+  Future<List<dynamic>> getGroupPosts(String groupId, {String? status, String? userId}) async {
     try {
-      final query = {'group_id': groupId};
-      if (status != null) {
-        query['status'] = status;
-      }
+      final query = <String, dynamic>{'group_id': groupId};
+      if (status != null) query['status'] = status;
+      if (userId != null) query['user_id'] = userId;
       final resp = await _apiService.get('/posts', queryParameters: query);
       final list = resp.data['posts'] as List<dynamic>? ?? [];
       return list;
