@@ -502,23 +502,43 @@ class _MessageBubble extends StatelessWidget {
                     // Reply preview
                     if (message.replyToInfo != null)
                       Container(
-                        padding: const EdgeInsets.all(6),
-                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        margin: const EdgeInsets.only(bottom: 6),
                         decoration: BoxDecoration(
-                          color: isMe ? const Color.fromRGBO(255, 255, 255, 0.15) : Colors.grey.shade200,
+                          color: isMe
+                              ? const Color.fromRGBO(0, 0, 0, 0.15)
+                              : Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(8),
                           border: Border(
-                            left: BorderSide(width: 2, color: isMe ? Colors.white70 : const Color(0xFF3b82f6)),
+                            left: BorderSide(
+                              width: 3,
+                              color: isMe ? Colors.white70 : const Color(0xFF3b82f6),
+                            ),
                           ),
                         ),
-                        child: Text(
-                          message.replyToInfo!['content'] ?? '📷 Hình ảnh',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isMe ? Colors.white70 : Colors.grey[600],
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              message.replyToSenderName,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isMe ? Colors.white : const Color(0xFF3b82f6),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              message.replyToInfo!['content'] ?? '📷 Hình ảnh',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isMe ? Colors.white70 : Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
 

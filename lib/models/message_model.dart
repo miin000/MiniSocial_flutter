@@ -72,9 +72,12 @@ class MessageModel {
       senderInfo: json['sender_info'] is Map
           ? Map<String, dynamic>.from(json['sender_info'])
           : null,
-      replyToInfo: json['reply_to_info'] is Map
-          ? Map<String, dynamic>.from(json['reply_to_info'])
-          : null,
+      // API and Firestore both use 'reply_to'; legacy field is 'reply_to_info'
+      replyToInfo: json['reply_to'] is Map
+          ? Map<String, dynamic>.from(json['reply_to'])
+          : json['reply_to_info'] is Map
+              ? Map<String, dynamic>.from(json['reply_to_info'])
+              : null,
       sharedPostInfo: json['shared_post_info'] is Map
           ? Map<String, dynamic>.from(json['shared_post_info'])
           : null,
@@ -91,6 +94,14 @@ class MessageModel {
 
   String? get senderAvatar {
     return senderInfo?['avatar_url']?.toString();
+  }
+
+  /// Tên người gửi của tin nhắn được reply
+  String get replyToSenderName {
+    if (replyToInfo == null) return '';
+    final si = replyToInfo!['sender_info'];
+    if (si is Map) return si['full_name'] ?? si['username'] ?? 'Ẩn danh';
+    return replyToInfo!['sender_name'] ?? replyToInfo!['from_name'] ?? 'Ẩn danh';
   }
 
   bool get isSystem => messageType == 'system';
