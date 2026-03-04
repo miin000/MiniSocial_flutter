@@ -107,7 +107,45 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
           // Friends list
           RefreshIndicator(
             onRefresh: _loadAll,
-            child: ListView.builder(
+            child: _friends.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.people_outline,
+                              size: 64, color: Colors.grey.shade300),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Chưa có bạn bè nào',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Hãy kết bạn với mọi người trong cộng đồng',
+                            style: TextStyle(color: Colors.grey.shade600),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: () =>
+                                _tabController.animateTo(2),
+                            icon: const Icon(Icons.person_add),
+                            label: const Text('Tìm bạn bè'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3b82f6),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ListView.builder(
               padding: const EdgeInsets.all(12),
               itemCount: _friends.length,
               itemBuilder: (context, index) {
@@ -203,7 +241,33 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
           // Requests
           RefreshIndicator(
             onRefresh: _loadAll,
-            child: ListView.builder(
+            child: _requests.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.mark_email_unread_outlined,
+                              size: 64, color: Colors.grey.shade300),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Không có lời mời nào',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Các lời mời kết bạn mới sẽ xuất hiện ở đây',
+                            style:
+                                TextStyle(color: Colors.grey.shade600),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ListView.builder(
               padding: const EdgeInsets.all(12),
               itemCount: _requests.length,
               itemBuilder: (context, index) {

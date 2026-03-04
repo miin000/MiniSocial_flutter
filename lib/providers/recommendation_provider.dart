@@ -15,7 +15,7 @@ class RecommendationProvider with ChangeNotifier {
 
   List<Post> _posts = [];
   List<RecommendedItem> _rawItems = [];
-  String _source = '';        // "collaborative" | "popular"
+  String _source = '';        // "hybrid" | "popular"
   bool _isLoading = false;
   bool _serverDown = false;   // ML server không phản hồi
   String? _error;
@@ -28,7 +28,8 @@ class RecommendationProvider with ChangeNotifier {
   bool get serverDown => _serverDown;
   String? get error => _error;
   bool get hasRecommendations => _posts.isNotEmpty;
-  bool get isCollaborative => _source == 'collaborative';
+  /// true khi ML server đã chạy hybrid model (CF + Content-Based)
+  bool get isHybrid => _source == 'hybrid';
 
   /// Trả về lý do gợi ý cho một post_id
   String reasonFor(String postId) {
@@ -67,10 +68,9 @@ class RecommendationProvider with ChangeNotifier {
       final postIds = items.map((i) => i.postId).toList();
       _posts = await _service.fetchPostsByIds(postIds, currentUserId: userId);
     } catch (e) {
-      // ML server offline hoặc network error → ẩn section, không crash app
-      _serverDown = true;
-      _posts = [];
-      _rawItems = [];
+      // ML server offline hoặc network error
+      // Giữ lại _posts cũ nếu đã tải được trước, tránh mất gợi ý khi reload
+      _serverDown = _posts.isEmpty;
       debugPrint('[ML] Recommendation error: $e');
     } finally {
       _isLoading = false;

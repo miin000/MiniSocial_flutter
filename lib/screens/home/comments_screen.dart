@@ -9,6 +9,7 @@ import '../../providers/post_provider.dart';
 import '../../providers/group_provider.dart';
 import '../../services/post_service.dart';
 import '../../services/api_service.dart';
+import '../../components/emoji_picker_sheet.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
 class CommentsScreen extends StatefulWidget {
@@ -153,6 +154,21 @@ class _CommentsScreenState extends State<CommentsScreen> {
     });
   }
 
+  void _showEmojiPicker() {
+    showEmojiPickerSheet(context, onEmojiSelected: (emoji) {
+      final pos = _commentController.selection.baseOffset;
+      final text = _commentController.text;
+      final newText = pos < 0
+          ? text + emoji
+          : text.substring(0, pos) + emoji + text.substring(pos);
+      _commentController.value = _commentController.value.copyWith(
+        text: newText,
+        selection: TextSelection.collapsed(
+            offset: (pos < 0 ? text.length : pos) + emoji.length),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -215,6 +231,12 @@ class _CommentsScreenState extends State<CommentsScreen> {
             ),
             child: Row(
               children: [
+                IconButton(
+                  icon: const Icon(Icons.emoji_emotions_outlined,
+                      color: Color(0xFFf59e0b)),
+                  onPressed: _showEmojiPicker,
+                  tooltip: 'Emoji',
+                ),
                 Expanded(
                   child: TextField(
                     controller: _commentController,

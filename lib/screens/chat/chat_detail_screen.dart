@@ -11,6 +11,7 @@ import '../../providers/auth_provider.dart';
 import '../../models/conversation_model.dart';
 import '../../models/message_model.dart';
 import '../../services/cloudinary_service.dart';
+import '../../components/emoji_picker_sheet.dart';
 import 'group_info_screen.dart';
 
 class ChatDetailScreen extends StatefulWidget {
@@ -59,6 +60,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _scrollController.dispose();
     _chatProvider.stopMessagesListener(widget.conversation.id);
     super.dispose();
+  }
+
+  void _showEmojiPicker() {
+    showEmojiPickerSheet(context, onEmojiSelected: (emoji) {
+      final pos = _msgController.selection.baseOffset;
+      final text = _msgController.text;
+      final newText = pos < 0
+          ? text + emoji
+          : text.substring(0, pos) + emoji + text.substring(pos);
+      _msgController.value = _msgController.value.copyWith(
+        text: newText,
+        selection: TextSelection.collapsed(
+            offset: (pos < 0 ? text.length : pos) + emoji.length),
+      );
+    });
   }
 
   Future<void> _sendText() async {
@@ -344,6 +360,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   IconButton(
                     icon: const Icon(Icons.image, color: Color(0xFF3b82f6)),
                     onPressed: _isSending ? null : _sendImage,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.emoji_emotions_outlined,
+                        color: Color(0xFFf59e0b)),
+                    onPressed: _showEmojiPicker,
+                    tooltip: 'Emoji',
                   ),
                   Expanded(
                     child: TextField(

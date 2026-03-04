@@ -50,7 +50,7 @@ class RecommendationService {
   // ── Gợi ý bài viết từ ML server ──────────────────────────────────────────
 
   /// Trả về raw list từ ML server (post_id + score + reason)
-  /// source: "collaborative" | "popular"
+  /// source: "hybrid" | "popular"
   Future<({List<RecommendedItem> items, String source})> getRecommendedItems(
     String userId,
   ) async {
