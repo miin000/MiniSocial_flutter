@@ -19,16 +19,46 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
   late TabController _tabController;
   final FriendService _friendService = FriendService();
 
+  final TextEditingController _searchController = TextEditingController();
   List<dynamic> _friends = [];
   List<dynamic> _requests = [];
   List<dynamic> _suggestions = [];
   bool _loading = false;
+  String _searchQuery = '';
+
+  List<dynamic> get _filteredFriends => _searchQuery.isEmpty
+      ? _friends
+      : _friends.where((item) {
+          final name = (item['fullName'] ?? item['name'] ?? '').toString().toLowerCase();
+          return name.contains(_searchQuery.toLowerCase());
+        }).toList();
+
+  List<dynamic> get _filteredRequests => _searchQuery.isEmpty
+      ? _requests
+      : _requests.where((item) {
+          final name = (item['fromName'] ?? item['fullName'] ?? '').toString().toLowerCase();
+          return name.contains(_searchQuery.toLowerCase());
+        }).toList();
+
+  List<dynamic> get _filteredSuggestions => _searchQuery.isEmpty
+      ? _suggestions
+      : _suggestions.where((item) {
+          final name = (item['fullName'] ?? item['name'] ?? '').toString().toLowerCase();
+          return name.contains(_searchQuery.toLowerCase());
+        }).toList();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadAll();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAll() async {
@@ -99,15 +129,49 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
           ],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Tìm kiếm...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+              ),
+              onChanged: (v) => setState(() => _searchQuery = v),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : TabBarView(
+              controller: _tabController,
+              children: [
           // Friends list
           RefreshIndicator(
             onRefresh: _loadAll,
-            child: _friends.isEmpty
+            child: _filteredFriends.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),
@@ -147,9 +211,9 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                   )
                 : ListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: _friends.length,
+              itemCount: _filteredFriends.length,
               itemBuilder: (context, index) {
-                final item = _friends[index];
+                final item = _filteredFriends[index];
                 final name = item['fullName'] ?? item['name'] ?? 'Người dùng';
                 final avatar = item['avatar'];
                 final mutual = item['mutualCount'] ?? item['mutual'] ?? 0;
@@ -241,7 +305,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
           // Requests
           RefreshIndicator(
             onRefresh: _loadAll,
-            child: _requests.isEmpty
+            child: _filteredRequests.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),
@@ -269,53 +333,79 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                   )
                 : ListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: _requests.length,
+              itemCount: _filteredRequests.length,
               itemBuilder: (context, index) {
-                final item = _requests[index];
+                final item = _filteredRequests[index];
                 final name = item['fromName'] ?? item['fullName'] ?? 'Người gửi';
                 final avatar = item['avatar'] ?? item['fromAvatar'];
                 final mutual = item['mutualCount'] ?? 0;
 
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
-                  child: ListTile(
-                    leading: _buildAvatar(avatar, name),
-                    title: Text(name),
-                    subtitle: Text('$mutual bạn chung'),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
                       children: [
-                        ElevatedButton(
-                          onPressed: () async {
-                            final res = await _friendService.acceptRequest(item['id'] ?? item['_id'] ?? item['requestId']);
-                            if (res['success']) {
-                              Fluttertoast.showToast(msg: 'Đã chấp nhận');
-                              _loadAll();
-                            } else {
-                              Fluttertoast.showToast(msg: res['message'] ?? 'Lỗi');
-                            }
-                          },
-                          child: const Text('Chấp nhận'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF3b82f6),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: () async {
-                            final res = await _friendService.rejectRequest(item['id'] ?? item['_id'] ?? item['requestId']);
-                            if (res['success']) {
-                              Fluttertoast.showToast(msg: 'Đã từ chối');
-                              _loadAll();
-                            } else {
-                              Fluttertoast.showToast(msg: res['message'] ?? 'Lỗi');
-                            }
-                          },
-                          child: const Text('Từ chối'),
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                        _buildAvatar(avatar, name),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text('$mutual bạn chung', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: ElevatedButton(
+                                      onPressed: () async {
+                                        final res = await _friendService.acceptRequest(item['id'] ?? item['_id'] ?? item['requestId']);
+                                        if (res['success']) {
+                                          Fluttertoast.showToast(msg: 'Đã chấp nhận');
+                                          _loadAll();
+                                        } else {
+                                          Fluttertoast.showToast(msg: res['message'] ?? 'Lỗi');
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF3b82f6),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                      ),
+                                      child: const Text('Chấp nhận'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: OutlinedButton(
+                                      onPressed: () async {
+                                        final res = await _friendService.rejectRequest(item['id'] ?? item['_id'] ?? item['requestId']);
+                                        if (res['success']) {
+                                          Fluttertoast.showToast(msg: 'Đã từ chối');
+                                          _loadAll();
+                                        } else {
+                                          Fluttertoast.showToast(msg: res['message'] ?? 'Lỗi');
+                                        }
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                      ),
+                                      child: const Text('Từ chối'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -331,39 +421,67 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
             onRefresh: _loadAll,
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: _suggestions.length,
+              itemCount: _filteredSuggestions.length,
               itemBuilder: (context, index) {
-                final item = _suggestions[index];
+                final item = _filteredSuggestions[index];
                 final name = item['fullName'] ?? item['name'] ?? 'Người dùng';
                 final avatar = item['avatar'];
                 final mutual = item['mutualCount'] ?? 0;
 
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
-                  child: ListTile(
-                    leading: _buildAvatar(avatar, name),
-                    title: Text(name),
-                    subtitle: Text('$mutual bạn chung'),
-                    trailing: ElevatedButton(
-                      onPressed: () async {
-                        final res = await _friendService.sendRequest(item['id'] ?? item['_id'] ?? item['userId']);
-                        if (res['success']) {
-                          Fluttertoast.showToast(msg: 'Đã gửi lời mời');
-                          _loadAll();
-                        } else {
-                          Fluttertoast.showToast(msg: res['message'] ?? 'Lỗi');
-                        }
-                      },
-                      child: const Text('Thêm bạn bè'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563eb),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                      ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        _buildAvatar(avatar, name),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text('$mutual bạn chung', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    final res = await _friendService.sendRequest(item['id'] ?? item['_id'] ?? item['userId']);
+                                    if (res['success']) {
+                                      Fluttertoast.showToast(msg: 'Đã gửi lời mời');
+                                      _loadAll();
+                                    } else {
+                                      Fluttertoast.showToast(msg: res['message'] ?? 'Lỗi');
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2563eb),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  ),
+                                  child: const Text('Thêm bạn bè'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );
               },
             ),
+          ),
+        ],
+      ),
           ),
         ],
       ),
