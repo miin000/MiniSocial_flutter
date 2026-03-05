@@ -4,15 +4,26 @@ import 'package:flutter/foundation.dart';
 
 class AppConfig {
   // API Base URL (Render) - bật lại khi push code
-  // static const String apiBaseUrl =
-  //     'https://minisocial-api-ldl3.onrender.com/api/v1';
+
+  static const String apiBaseUrl =
+      'https://minisocial-api-ldl3.onrender.com/api/v1';
 
   // API Base URL (Local) - để test xem log
 
+<<<<<<< HEAD
   static const String apiBaseUrl = 'http://localhost:3001/api/v1';
   // Next.js dev server where published config will be hosted
   
   static const String flutterConfigUrl = 'http://localhost:3000/mini_social_config.json';
+=======
+  // static const String apiBaseUrl = 'http://localhost:3001/api/v1';
+
+  // ML Server URL (recommendation system)
+
+  static const String mlBaseUrl = 'https://minisocial-recomendation-system.onrender.com';
+
+  // static const String mlBaseUrl = 'http://localhost:8000';
+>>>>>>> 619c1ebe504fea6879651014aa7ad64cd0554dd8
 
   static const String appName = 'MiniSocial';
   static const String appVersion = '1.0.0';

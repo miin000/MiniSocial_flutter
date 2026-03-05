@@ -11,6 +11,7 @@ class MemberItem extends StatelessWidget {
   final VoidCallback? onMakeAdmin;
   final VoidCallback? onRemoveAdmin;
   final VoidCallback? onTransfer;
+  final VoidCallback? onTapProfile;
 
   const MemberItem({
     super.key,
@@ -20,6 +21,7 @@ class MemberItem extends StatelessWidget {
     this.onMakeAdmin,
     this.onRemoveAdmin,
     this.onTransfer,
+    this.onTapProfile,
   });
 
   @override
@@ -36,6 +38,7 @@ class MemberItem extends StatelessWidget {
 
     return Material(
       child: ListTile(
+        onTap: onTapProfile,
         leading: CircleAvatar(
           backgroundColor: Colors.blue.shade200,
           backgroundImage: avatar != null ? NetworkImage(avatar) : null,

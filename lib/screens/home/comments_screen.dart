@@ -9,7 +9,9 @@ import '../../providers/post_provider.dart';
 import '../../providers/group_provider.dart';
 import '../../services/post_service.dart';
 import '../../services/api_service.dart';
+import '../../components/emoji_picker_sheet.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import '../profile/public_profile_screen.dart';
 
 class CommentsScreen extends StatefulWidget {
   final Post post;
@@ -39,6 +41,16 @@ class _CommentsScreenState extends State<CommentsScreen> {
   void dispose() {
     _commentController.dispose();
     super.dispose();
+  }
+
+  void _openUserProfile(String? userId) {
+    if (userId == null || userId.isEmpty) return;
+    final currentUserId = Provider.of<AuthProvider>(context, listen: false).user?.id;
+    if (userId == currentUserId) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PublicProfileScreen(userId: userId)),
+    );
   }
 
   Future<void> _loadComments() async {
@@ -153,6 +165,21 @@ class _CommentsScreenState extends State<CommentsScreen> {
     });
   }
 
+  void _showEmojiPicker() {
+    showEmojiPickerSheet(context, onEmojiSelected: (emoji) {
+      final pos = _commentController.selection.baseOffset;
+      final text = _commentController.text;
+      final newText = pos < 0
+          ? text + emoji
+          : text.substring(0, pos) + emoji + text.substring(pos);
+      _commentController.value = _commentController.value.copyWith(
+        text: newText,
+        selection: TextSelection.collapsed(
+            offset: (pos < 0 ? text.length : pos) + emoji.length),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -215,6 +242,12 @@ class _CommentsScreenState extends State<CommentsScreen> {
             ),
             child: Row(
               children: [
+                IconButton(
+                  icon: const Icon(Icons.emoji_emotions_outlined,
+                      color: Color(0xFFf59e0b)),
+                  onPressed: _showEmojiPicker,
+                  tooltip: 'Emoji',
+                ),
                 Expanded(
                   child: TextField(
                     controller: _commentController,
@@ -260,7 +293,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
+              GestureDetector(
+                onTap: () => _openUserProfile(comment.userId),
+                child: CircleAvatar(
                 radius: isReply ? 16 : 20,
                 backgroundColor: const Color(0xFF3b82f6),
                 child: comment.userAvatar != null
@@ -280,8 +315,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
                         comment.userName?.substring(0, 1).toUpperCase() ?? 'U',
                         style: const TextStyle(color: Colors.white),
                       ),
-              ),
-              const SizedBox(width: 12),
+                  ),
+                ),
+                const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -295,11 +331,14 @@ class _CommentsScreenState extends State<CommentsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            comment.username ?? comment.userName ?? 'Người dùng',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                          GestureDetector(
+                            onTap: () => _openUserProfile(comment.userId),
+                            child: Text(
+                              comment.username ?? comment.userName ?? 'Người dùng',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),

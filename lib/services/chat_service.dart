@@ -292,6 +292,42 @@ class ChatService {
     }
   }
 
+  /// Chặn người dùng trong chat riêng (UC4.12)
+  Future<Map<String, dynamic>> blockUser(String convId) async {
+    try {
+      final resp = await _api.post('/conversation-participants/$convId/block');
+      return {'success': true, 'data': resp.data};
+    } on DioException catch (e) {
+      return {'success': false, 'message': _extractMessage(e)};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// Bỏ chặn người dùng trong chat riêng (UC4.13)
+  Future<Map<String, dynamic>> unblockUser(String convId) async {
+    try {
+      final resp = await _api.post('/conversation-participants/$convId/unblock');
+      return {'success': true, 'data': resp.data};
+    } on DioException catch (e) {
+      return {'success': false, 'message': _extractMessage(e)};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// Xóa lịch sử chat phía mình (UC4.11)
+  Future<Map<String, dynamic>> clearChatHistory(String convId) async {
+    try {
+      final resp = await _api.post('/conversation-participants/$convId/clear-history');
+      return {'success': true, 'data': resp.data};
+    } on DioException catch (e) {
+      return {'success': false, 'message': _extractMessage(e)};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   // ════════════════════════════════════════════════════════════════════════
   // FRIENDS (lấy danh sách bạn bè để tạo chat / thêm member)
   // ════════════════════════════════════════════════════════════════════════

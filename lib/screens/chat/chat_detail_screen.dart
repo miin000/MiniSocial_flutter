@@ -11,7 +11,10 @@ import '../../providers/auth_provider.dart';
 import '../../models/conversation_model.dart';
 import '../../models/message_model.dart';
 import '../../services/cloudinary_service.dart';
+import '../../components/emoji_picker_sheet.dart';
 import 'group_info_screen.dart';
+import '../profile/public_profile_screen.dart';
+import '../../services/chat_service.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final ConversationModel conversation;
@@ -59,6 +62,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _scrollController.dispose();
     _chatProvider.stopMessagesListener(widget.conversation.id);
     super.dispose();
+  }
+
+  void _showEmojiPicker() {
+    showEmojiPickerSheet(context, onEmojiSelected: (emoji) {
+      final pos = _msgController.selection.baseOffset;
+      final text = _msgController.text;
+      final newText = pos < 0
+          ? text + emoji
+          : text.substring(0, pos) + emoji + text.substring(pos);
+      _msgController.value = _msgController.value.copyWith(
+        text: newText,
+        selection: TextSelection.collapsed(
+            offset: (pos < 0 ? text.length : pos) + emoji.length),
+      );
+    });
   }
 
   Future<void> _sendText() async {
@@ -179,6 +197,91 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
+  void _showChatOptions() {
+    final chatService = ChatService();
+    final convId = widget.conversation.id;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.delete_sweep_outlined, color: Colors.orange),
+              title: const Text('Xóa lịch sử chat'),
+              subtitle: const Text('Chỉ xóa phía bạn', style: TextStyle(fontSize: 12)),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await chatService.clearChatHistory(convId);
+                if (result['success'] == true) {
+                  await context.read<ChatProvider>()
+                      .fetchMessages(convId, refresh: true);
+                  Fluttertoast.showToast(
+                    msg: 'Đã xóa lịch sử chat',
+                    backgroundColor: Colors.green,
+                  );
+                } else {
+                  Fluttertoast.showToast(
+                    msg: result['message'] ?? 'Lỗi xóa lịch sử',
+                    backgroundColor: Colors.red,
+                  );
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.block, color: Colors.red),
+              title: const Text('Chặn người dùng'),
+              subtitle: const Text('Người bị chặn không gửi được tin nhắn', style: TextStyle(fontSize: 12)),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await chatService.blockUser(convId);
+                if (result['success'] == true) {
+                  Fluttertoast.showToast(
+                    msg: 'Đã chặn người dùng',
+                    backgroundColor: Colors.green,
+                  );
+                } else {
+                  Fluttertoast.showToast(
+                    msg: result['message'] ?? 'Lỗi chặn người dùng',
+                    backgroundColor: Colors.red,
+                  );
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.do_not_disturb_off, color: Colors.green),
+              title: const Text('Bỏ chặn người dùng'),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await chatService.unblockUser(convId);
+                if (result['success'] == true) {
+                  Fluttertoast.showToast(
+                    msg: 'Đã bỏ chặn người dùng',
+                    backgroundColor: Colors.green,
+                  );
+                } else {
+                  Fluttertoast.showToast(
+                    msg: result['message'] ?? 'Lỗi bỏ chặn',
+                    backgroundColor: Colors.red,
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showEditDialog(MessageModel msg) {
     final editController = TextEditingController(text: msg.content);
     showDialog(
@@ -247,6 +350,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           ),
         ),
         actions: [
+          if (widget.conversation.type == 'private')
+            IconButton(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'Tùy chọn',
+              onPressed: _showChatOptions,
+            ),
           if (widget.conversation.type == 'group')
             IconButton(
               icon: const Icon(Icons.info_outline),
@@ -294,6 +403,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       message: msg,
                       isMe: isMe,
                       onLongPress: () => _showMessageActions(msg),
+                      onTapAvatar: !isMe && msg.senderId != null
+                          ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PublicProfileScreen(userId: msg.senderId!),
+                                ),
+                              )
+                          : null,
                     );
                   },
                 );
@@ -344,6 +461,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   IconButton(
                     icon: const Icon(Icons.image, color: Color(0xFF3b82f6)),
                     onPressed: _isSending ? null : _sendImage,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.emoji_emotions_outlined,
+                        color: Color(0xFFf59e0b)),
+                    onPressed: _showEmojiPicker,
+                    tooltip: 'Emoji',
                   ),
                   Expanded(
                     child: TextField(
@@ -406,11 +529,13 @@ class _MessageBubble extends StatelessWidget {
   final MessageModel message;
   final bool isMe;
   final VoidCallback onLongPress;
+  final VoidCallback? onTapAvatar;
 
   const _MessageBubble({
     required this.message,
     required this.isMe,
     required this.onLongPress,
+    this.onTapAvatar,
   });
 
   @override
@@ -440,7 +565,10 @@ class _MessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMe) ...[
-            _buildSenderAvatar(),
+            GestureDetector(
+              onTap: onTapAvatar,
+              child: _buildSenderAvatar(),
+            ),
             const SizedBox(width: 6),
           ],
           Flexible(
@@ -480,23 +608,43 @@ class _MessageBubble extends StatelessWidget {
                     // Reply preview
                     if (message.replyToInfo != null)
                       Container(
-                        padding: const EdgeInsets.all(6),
-                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        margin: const EdgeInsets.only(bottom: 6),
                         decoration: BoxDecoration(
-                          color: isMe ? const Color.fromRGBO(255, 255, 255, 0.15) : Colors.grey.shade200,
+                          color: isMe
+                              ? const Color.fromRGBO(0, 0, 0, 0.15)
+                              : Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(8),
                           border: Border(
-                            left: BorderSide(width: 2, color: isMe ? Colors.white70 : const Color(0xFF3b82f6)),
+                            left: BorderSide(
+                              width: 3,
+                              color: isMe ? Colors.white70 : const Color(0xFF3b82f6),
+                            ),
                           ),
                         ),
-                        child: Text(
-                          message.replyToInfo!['content'] ?? '📷 Hình ảnh',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isMe ? Colors.white70 : Colors.grey[600],
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              message.replyToSenderName,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isMe ? Colors.white : const Color(0xFF3b82f6),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              message.replyToInfo!['content'] ?? '📷 Hình ảnh',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isMe ? Colors.white70 : Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
 
@@ -733,6 +881,7 @@ class _MessageBubble extends StatelessWidget {
 
   String _formatMsgTime(DateTime? time) {
     if (time == null) return '';
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    final local = time.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 }

@@ -7,6 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/group_provider.dart';
 import '../../components/member_item.dart';
 import '../../models/group_model.dart';
+import '../profile/public_profile_screen.dart';
 
 class GroupMembersScreen extends StatefulWidget {
   final String groupId;
@@ -92,8 +93,25 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
           return MemberItem(
             member: member,
             isCurrentUserOwner: widget.isCurrentUserOwner,
+<<<<<<< HEAD
             onRemove: canRemove
                 ? () => _showRemoveConfirmation(
+=======
+            onTapProfile: () {
+              final memberId = member['userId'] as String?;
+              if (memberId != null && memberId.isNotEmpty) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PublicProfileScreen(userId: memberId),
+                  ),
+                );
+              }
+            },
+            onRemove: memberRole == MemberRole.owner
+                ? null
+                : () => _showRemoveConfirmation(
+>>>>>>> 619c1ebe504fea6879651014aa7ad64cd0554dd8
                       context,
                       member['fullName'] ?? member['username'] ?? 'User',
                       member['userId'],

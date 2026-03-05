@@ -51,6 +51,12 @@ class GroupProvider with ChangeNotifier {
   bool get isCurrentUserAdminOrModerator =>
       isCurrentUserAdmin || isCurrentUserModerator;
 
+  /// Cho phép cập nhật role cục bộ (vd: sau khi chuyển quyền trưởng nhóm)
+  void setCurrentUserRole(String role) {
+    _currentUserRole = role;
+    notifyListeners();
+  }
+
   final Set<String> _deletedPostIds = {};
 
   List<Post> getGroupPosts(String groupId) {
@@ -175,12 +181,12 @@ class GroupProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> fetchGroupPosts(String groupId, {bool refresh = false}) async {
+  Future<void> fetchGroupPosts(String groupId, {bool refresh = false, String? userId}) async {
   _isLoadingPosts = true;
   notifyListeners();
 
   try {
-    final raw = await _groupService.getGroupPosts(groupId);
+    final raw = await _groupService.getGroupPosts(groupId, userId: userId);
     final newPostsFromServer = raw
         .map((p) => Post.fromJson(p as Map<String, dynamic>))
         .where((post) => post.status != 'deleted')

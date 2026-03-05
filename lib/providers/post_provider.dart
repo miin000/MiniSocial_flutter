@@ -190,35 +190,31 @@ class PostProvider with ChangeNotifier {
   // Toggle like
   Future<void> toggleLike(String postId, String userId) async {
     try {
-      // Optimistic update
-      final postIndex = _posts.indexWhere((p) => p.id == postId);
-      if (postIndex != -1) {
-        final post = _posts[postIndex];
-        final isLiked = post.isLiked ?? false;
-
-        _posts[postIndex] = post.copyWith(
-          isLiked: !isLiked,
-          likesCount: isLiked ? post.likesCount - 1 : post.likesCount + 1,
-        );
-        notifyListeners();
-      }
+      // Optimistic update — cập nhật cả _posts lẫn _profilePosts
+      _toggleLikeInList(_posts, postId);
+      _toggleLikeInList(_profilePosts, postId);
+      notifyListeners();
 
       // Make API call
       await _postService.toggleLike(userId: userId, postId: postId);
     } catch (e) {
       // Revert on error
-      final postIndex = _posts.indexWhere((p) => p.id == postId);
-      if (postIndex != -1) {
-        final post = _posts[postIndex];
-        final isLiked = post.isLiked ?? false;
-
-        _posts[postIndex] = post.copyWith(
-          isLiked: !isLiked,
-          likesCount: isLiked ? post.likesCount + 1 : post.likesCount - 1,
-        );
-        notifyListeners();
-      }
+      _toggleLikeInList(_posts, postId);
+      _toggleLikeInList(_profilePosts, postId);
+      notifyListeners();
       _error = e.toString();
+    }
+  }
+
+  void _toggleLikeInList(List<Post> list, String postId) {
+    final idx = list.indexWhere((p) => p.id == postId);
+    if (idx != -1) {
+      final post = list[idx];
+      final isLiked = post.isLiked ?? false;
+      list[idx] = post.copyWith(
+        isLiked: !isLiked,
+        likesCount: isLiked ? post.likesCount - 1 : post.likesCount + 1,
+      );
     }
   }
 
@@ -272,21 +268,24 @@ class PostProvider with ChangeNotifier {
         content: content,
       );
 
-      // Update post's comments count
-      final postIndex = _posts.indexWhere((p) => p.id == postId);
-      if (postIndex != -1) {
-        final post = _posts[postIndex];
-        _posts[postIndex] = post.copyWith(
-          commentsCount: post.commentsCount + 1,
-        );
-        notifyListeners();
-      }
+      // Update post's comments count — cả home feed lẫn profile
+      _incrementCommentCount(_posts, postId);
+      _incrementCommentCount(_profilePosts, postId);
+      notifyListeners();
 
       return comment;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
       return null;
+    }
+  }
+
+  void _incrementCommentCount(List<Post> list, String postId) {
+    final idx = list.indexWhere((p) => p.id == postId);
+    if (idx != -1) {
+      final post = list[idx];
+      list[idx] = post.copyWith(commentsCount: post.commentsCount + 1);
     }
   }
 
@@ -330,10 +329,12 @@ class PostProvider with ChangeNotifier {
 
     try {
       // Dùng endpoint /posts/user/:id — chỉ lấy bài của đúng user đó
+      // truyền userId làm current_user_id để server trả isLiked đúng
       final result = await _postService.getUserPosts(
         userId,
         page: _profilePage,
         limit: 20,
+        currentUserId: userId,
       );
       final List<Post> newPosts = result['posts'] as List<Post>;
       final int total = (result['total'] as num?)?.toInt() ?? 0;

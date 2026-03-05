@@ -43,11 +43,15 @@ class PostService {
     }
   }
 
-  Future<Map<String, dynamic>> getUserPosts(String userId, {int page = 1, int limit = 20}) async {
+  Future<Map<String, dynamic>> getUserPosts(String userId, {int page = 1, int limit = 20, String? currentUserId}) async {
     try {
       final response = await _dio.get(
         '$baseUrl/posts/user/$userId',
-        queryParameters: {'page': page, 'limit': limit},
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+          if (currentUserId != null) 'current_user_id': currentUserId,
+        },
       );
       
       final posts = (response.data['posts'] as List)
