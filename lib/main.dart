@@ -21,6 +21,7 @@ import 'screens/splash/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/main_screen.dart';
+import 'screens/maintenance_screen.dart';
 
 /// Global flag: Firebase đã khởi tạo thành công chưa
 // Đã chuyển sang config/firebase_config.dart
@@ -162,6 +163,7 @@ class MyApp extends StatelessWidget {
           '/login': (context) => const LoginScreen(),
           '/register': (context) => const RegisterScreen(),
           '/main': (context) => const MainScreen(),
+          '/maintenance': (context) => const MaintenanceScreen(),
         },
       ),
     );

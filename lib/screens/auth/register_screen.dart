@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import '../../services/config_service.dart';
 import '../../providers/auth_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -33,6 +34,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _handleRegister() async {
+    // check remote config allowing registration
+    final allowed = await ConfigService().getAllowRegistration();
+    if (!allowed) {
+      Fluttertoast.showToast(
+        msg: 'Đăng ký hiện đang tạm đóng.',
+        backgroundColor: Colors.orange,
+      );
+      return;
+    }
+
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 

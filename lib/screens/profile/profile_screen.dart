@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
 import '../../services/friend_service.dart';
+import '../../services/config_service.dart';
 import '../home/post_card.dart';
 import 'edit_profile_screen.dart';
 import 'settings_screen.dart';
@@ -84,7 +85,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final profilePosts = postProvider.profilePosts;
-    final postsCount = profilePosts.length;
+    // Dùng tổng thật từ API, không đếm số bài đã load (phân trang)
+    final postsCount = postProvider.profileTotal;
     final likesCount = profilePosts.fold<int>(0, (sum, post) => sum + post.likesCount);
 
     return Scaffold(

@@ -7,6 +7,7 @@ import '../../providers/post_provider.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/post_service.dart';
 import '../../services/api_service.dart';
+import '../../services/config_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
 class CreatePostScreen extends StatefulWidget {
@@ -65,12 +66,20 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   Future<void> _pickImages() async {
     try {
+      // Get allowed image count from config
+      int maxImages = 10;
+      try {
+        maxImages = await ConfigService().getMaxImagesPerPost();
+      } catch (_) {
+        maxImages = 10;
+      }
+
       final List<XFile> images = await _picker.pickMultiImage(imageQuality: 85);
       if (images.isEmpty) return;
-      final remaining = 5 - _selectedImages.length;
+      final remaining = maxImages - _selectedImages.length;
       if (remaining <= 0) {
         Fluttertoast.showToast(
-          msg: 'Đã đạt giới hạn 5 ảnh',
+          msg: 'Đã đạt giới hạn $maxImages ảnh',
           backgroundColor: Colors.orange,
         );
         return;
@@ -81,7 +90,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       });
       if (images.length > remaining) {
         Fluttertoast.showToast(
-          msg: 'Chỉ thêm được $remaining ảnh (giới hạn 5)',
+          msg: 'Chỉ thêm được $remaining ảnh (giới hạn $maxImages)',
           backgroundColor: Colors.orange,
         );
       }
@@ -152,10 +161,31 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     });
 
     try {
+      // perform config-based validations
+      final maxLen = await ConfigService().getMaxPostLength();
+      if (content.length > maxLen) {
+        Fluttertoast.showToast(
+          msg: 'Nội dung quá dài (tối đa $maxLen ký tự)',
+          backgroundColor: Colors.orange,
+        );
+        return;
+      }
+
       List<String>? mediaUrls;
       
       // Upload images to Cloudinary
       if (_selectedImages.isNotEmpty) {
+        // check per-file size
+        final allowedMb = await ConfigService().getMaxUploadSizeMb();
+        final allowedBytes = allowedMb * 1024 * 1024;
+        for (final f in _selectedImages) {
+          final bytes = await f.readAsBytes();
+          if (bytes.length > allowedBytes) {
+            final mb = (bytes.length / 1024 / 1024).toStringAsFixed(1);
+            throw Exception('Ảnh quá lớn (${mb}MB). Vui lòng chọn ảnh dưới ${allowedMb}MB.');
+          }
+        }
+
         mediaUrls = await _cloudinaryService.uploadMultipleXFiles(_selectedImages);
         if (mediaUrls.isEmpty) {
           throw Exception('Không thể upload ảnh');

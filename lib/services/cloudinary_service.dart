@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
+import 'config_service.dart';
 
 class CloudinaryService {
   static const String cloudName = 'dcfuybexm';
@@ -7,17 +8,37 @@ class CloudinaryService {
   static const String _uploadUrl =
       'https://api.cloudinary.com/v1_1/$cloudName/image/upload';
 
-  static const int _maxBytes = 9 * 1024 * 1024; // 9 MB – Cloudinary unsigned limit is 10 MB
-
   /// Upload a single [XFile]. Throws a descriptive [Exception] on failure.
   /// Uses readAsBytes() so it works on both mobile and web.
   Future<String?> uploadXFile(XFile imageFile) async {
     final bytes = await imageFile.readAsBytes();
     final fileName = imageFile.name.isNotEmpty ? imageFile.name : 'image.jpg';
 
-    if (bytes.length > _maxBytes) {
+    // Validate file type from remote config
+    String allowedTypes = 'jpg,jpeg,png,webp,gif';
+    try {
+      allowedTypes = await ConfigService().getAllowedImageTypes();
+    } catch (_) {
+      allowedTypes = 'jpg,jpeg,png,webp,gif';
+    }
+
+    final ext = fileName.split('.').last.toLowerCase();
+    if (!allowedTypes.split(',').map((t) => t.trim()).contains(ext)) {
+      throw Exception('Định dạng ảnh không được phép. Cho phép: $allowedTypes');
+    }
+
+    // Consult remote config for max upload size (MB)
+    int allowedMb = 9;
+    try {
+      allowedMb = await ConfigService().getMaxUploadSizeMb();
+    } catch (_) {
+      allowedMb = 9;
+    }
+    final allowedBytes = allowedMb * 1024 * 1024;
+
+    if (bytes.length > allowedBytes) {
       final mb = (bytes.length / 1024 / 1024).toStringAsFixed(1);
-      throw Exception('Ảnh quá lớn (${mb}MB). Vui lòng chọn ảnh dưới 9MB.');
+      throw Exception('Ảnh quá lớn (${mb}MB). Vui lòng chọn ảnh dưới ${allowedMb}MB.');
     }
 
     final dio = Dio(BaseOptions(

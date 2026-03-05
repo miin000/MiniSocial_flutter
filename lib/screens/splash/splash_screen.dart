@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../services/config_service.dart';
 import '../../providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -56,6 +57,13 @@ class _SplashScreenState extends State<SplashScreen>
     }
 
     if (!mounted) return;
+
+    // check maintenance mode before navigating
+    final maintenance = await ConfigService().getMaintenanceMode();
+    if (maintenance) {
+      Navigator.pushReplacementNamed(context, '/maintenance');
+      return;
+    }
 
     // Navigate dựa trên trạng thái auth
     if (authProvider.isAuthenticated) {

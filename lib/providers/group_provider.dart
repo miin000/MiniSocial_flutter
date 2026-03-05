@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/group_model.dart';
 import '../models/post_model.dart';
 import '../services/group_service.dart';
+import '../services/config_service.dart';
 import '../services/post_service.dart';
 import '../services/api_service.dart';
 import 'auth_provider.dart';
@@ -320,6 +321,20 @@ class GroupProvider with ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> joinGroup(String groupId, {String? currentUserId}) async {
+    // Enforce client-side limit from published config
+    try {
+      final max = await ConfigService().getMaxGroupsPerUser(force: true);
+      if (_myGroups.length >= max) {
+        return {
+          'success': false,
+          'message': 'Bạn đã đạt số nhóm tối đa là $max',
+        };
+      }
+    } catch (e) {
+      // If config fetch fails, continue and rely on backend
+      print('Failed to fetch config for max_groups_per_user: $e');
+    }
+
     final result = await _groupService.joinGroup(groupId);
     
     if (result['success']) {
