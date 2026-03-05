@@ -11,6 +11,7 @@ import '../../services/post_service.dart';
 import '../../services/api_service.dart';
 import '../../components/emoji_picker_sheet.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import '../profile/public_profile_screen.dart';
 
 class CommentsScreen extends StatefulWidget {
   final Post post;
@@ -40,6 +41,16 @@ class _CommentsScreenState extends State<CommentsScreen> {
   void dispose() {
     _commentController.dispose();
     super.dispose();
+  }
+
+  void _openUserProfile(String? userId) {
+    if (userId == null || userId.isEmpty) return;
+    final currentUserId = Provider.of<AuthProvider>(context, listen: false).user?.id;
+    if (userId == currentUserId) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PublicProfileScreen(userId: userId)),
+    );
   }
 
   Future<void> _loadComments() async {
@@ -282,7 +293,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
+              GestureDetector(
+                onTap: () => _openUserProfile(comment.userId),
+                child: CircleAvatar(
                 radius: isReply ? 16 : 20,
                 backgroundColor: const Color(0xFF3b82f6),
                 child: comment.userAvatar != null
@@ -302,8 +315,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
                         comment.userName?.substring(0, 1).toUpperCase() ?? 'U',
                         style: const TextStyle(color: Colors.white),
                       ),
-              ),
-              const SizedBox(width: 12),
+                  ),
+                ),
+                const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -317,11 +331,14 @@ class _CommentsScreenState extends State<CommentsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            comment.username ?? comment.userName ?? 'Người dùng',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                          GestureDetector(
+                            onTap: () => _openUserProfile(comment.userId),
+                            child: Text(
+                              comment.username ?? comment.userName ?? 'Người dùng',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),

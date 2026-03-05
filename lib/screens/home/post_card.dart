@@ -12,6 +12,7 @@ import 'comments_screen.dart';
 import 'edit_post_screen.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter/services.dart';
+import '../profile/public_profile_screen.dart';
 
 class PostCard extends StatefulWidget {
   final Post post;
@@ -29,6 +30,16 @@ class _PostCardState extends State<PostCard> {
   void initState() {
     super.initState();
     timeago.setLocaleMessages('vi', timeago.ViMessages());
+  }
+
+  void _openUserProfile(String? userId) {
+    if (userId == null || userId.isEmpty) return;
+    final currentUserId = Provider.of<AuthProvider>(context, listen: false).user?.id;
+    if (userId == currentUserId) return; // own profile handled by bottom nav
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PublicProfileScreen(userId: userId)),
+    );
   }
 
   void _showReportDialog() {
@@ -219,7 +230,9 @@ class _PostCardState extends State<PostCard> {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                CircleAvatar(
+                GestureDetector(
+                  onTap: () => _openUserProfile(widget.post.userId),
+                  child: CircleAvatar(
                   radius: 20,
                   backgroundColor: const Color(0xFF3b82f6),
                   child: widget.post.userAvatar != null && widget.post.userAvatar!.isNotEmpty
@@ -248,22 +261,26 @@ class _PostCardState extends State<PostCard> {
                         : 'U')),
                     style: const TextStyle(color: Colors.white),
                   ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        // Ưu tiên: userName (fullName) → username → fallback
-                        (widget.post.userName?.isNotEmpty == true
-                            ? widget.post.userName!
-                            : (widget.post.username?.isNotEmpty == true
-                            ? '@${widget.post.username!}'
-                            : 'Người dùng')),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                      GestureDetector(
+                        onTap: () => _openUserProfile(widget.post.userId),
+                        child: Text(
+                          // Ưu tiên: userName (fullName) → username → fallback
+                          (widget.post.userName?.isNotEmpty == true
+                              ? widget.post.userName!
+                              : (widget.post.username?.isNotEmpty == true
+                              ? '@${widget.post.username!}'
+                              : 'Người dùng')),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                       if (widget.post.userName != null &&
