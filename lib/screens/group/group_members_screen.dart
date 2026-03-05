@@ -93,10 +93,6 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
           return MemberItem(
             member: member,
             isCurrentUserOwner: widget.isCurrentUserOwner,
-<<<<<<< HEAD
-            onRemove: canRemove
-                ? () => _showRemoveConfirmation(
-=======
             onTapProfile: () {
               final memberId = member['userId'] as String?;
               if (memberId != null && memberId.isNotEmpty) {
@@ -108,10 +104,8 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
                 );
               }
             },
-            onRemove: memberRole == MemberRole.owner
-                ? null
-                : () => _showRemoveConfirmation(
->>>>>>> 619c1ebe504fea6879651014aa7ad64cd0554dd8
+            onRemove: canRemove
+                ? () => _showRemoveConfirmation(
                       context,
                       member['fullName'] ?? member['username'] ?? 'User',
                       member['userId'],
