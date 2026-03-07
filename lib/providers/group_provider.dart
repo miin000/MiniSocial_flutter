@@ -23,6 +23,9 @@ class GroupProvider with ChangeNotifier {
   final Map<String, List<Post>> _groupPosts = {};
   List<Post> _pendingPosts = [];
   bool _isLoadingPendingPosts = false;
+  List<Post> _myPendingPosts = [];
+  bool _isLoadingMyPendingPosts = false;
+  bool _isPendingJoinForCurrentGroup = false;
 
   bool _isLoading = false;
   bool _isLoadingPosts = false;
@@ -38,6 +41,9 @@ class GroupProvider with ChangeNotifier {
   bool get isLoadingPosts => _isLoadingPosts;
   bool get isLoadingPendingPosts => _isLoadingPendingPosts;
   List<Post> get pendingPosts => _pendingPosts;
+  List<Post> get myPendingPosts => _myPendingPosts;
+  bool get isLoadingMyPendingPosts => _isLoadingMyPendingPosts;
+  bool get isPendingJoinForCurrentGroup => _isPendingJoinForCurrentGroup;
   String? get errorMessage => _errorMessage;
 
   bool get isCurrentUserAdmin =>
@@ -161,6 +167,7 @@ class GroupProvider with ChangeNotifier {
           : [];
 
       _currentUserRole = result['userRole'] as String?;
+      _isPendingJoinForCurrentGroup = result['isPendingJoin'] == true;
 
       if (result['posts'] != null && result['posts'] is List) {
         final posts = (result['posts'] as List)
@@ -285,6 +292,20 @@ class GroupProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void incrementShareOnGroupPost(String postId) {
+    final entry = _groupPosts.entries.firstWhere(
+      (e) => e.value.any((p) => p.id == postId),
+      orElse: () => MapEntry('', <Post>[]),
+    );
+    if (entry.key == '') return;
+    final posts = entry.value!;
+    final idx = posts.indexWhere((p) => p.id == postId);
+    if (idx == -1) return;
+    final post = posts[idx];
+    posts[idx] = post.copyWith(sharesCount: post.sharesCount + 1);
+    notifyListeners();
+  }
+
   Future<Post?> createGroupPost(
       String groupId, {
         required String content,
@@ -346,6 +367,9 @@ class GroupProvider with ChangeNotifier {
     if (result['success']) {
       final uid = currentUserId ?? '';
       final isPending = result['isPending'] == true;
+      if (isPending) {
+        _isPendingJoinForCurrentGroup = true;
+      }
       
       if (!isPending) {
         if (uid.isNotEmpty) {
@@ -379,6 +403,7 @@ class GroupProvider with ChangeNotifier {
     final result = await _groupService.leaveGroup(groupId);
 
     if (result['success']) {
+      _isPendingJoinForCurrentGroup = false;
       final uid = currentUserId ?? '';
 
       _currentUserRole = null;
@@ -551,6 +576,25 @@ class GroupProvider with ChangeNotifier {
       _pendingPosts = [];
     } finally {
       _isLoadingPendingPosts = false;
+      notifyListeners();
+    }
+  }
+
+  // Fetch only the current user's own pending posts in a group (for regular members)
+  Future<void> fetchMyPendingGroupPosts(String groupId, String userId) async {
+    _isLoadingMyPendingPosts = true;
+    notifyListeners();
+    try {
+      final raw = await _groupService.getGroupPosts(groupId, status: 'PENDING', userId: userId);
+      _myPendingPosts = raw
+          .map((p) => Post.fromJson(p as Map<String, dynamic>))
+          .where((post) => post.status?.toUpperCase() == 'PENDING')
+          .toList();
+    } catch (e) {
+      print('fetchMyPendingGroupPosts error: $e');
+      _myPendingPosts = [];
+    } finally {
+      _isLoadingMyPendingPosts = false;
       notifyListeners();
     }
   }

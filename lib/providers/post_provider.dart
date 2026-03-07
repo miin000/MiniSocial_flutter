@@ -289,6 +289,20 @@ class PostProvider with ChangeNotifier {
     }
   }
 
+  void incrementShareCount(String postId) {
+    _incrementShareInList(_posts, postId);
+    _incrementShareInList(_profilePosts, postId);
+    notifyListeners();
+  }
+
+  void _incrementShareInList(List<Post> list, String postId) {
+    final idx = list.indexWhere((p) => p.id == postId);
+    if (idx != -1) {
+      final post = list[idx];
+      list[idx] = post.copyWith(sharesCount: post.sharesCount + 1);
+    }
+  }
+
   // Toggle comment like
   Future<void> toggleCommentLike(String commentId, String userId) async {
     try {

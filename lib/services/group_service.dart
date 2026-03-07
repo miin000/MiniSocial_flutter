@@ -346,6 +346,7 @@ class GroupService {
         'group': group,
         'members': members,
         'userRole': userRole,
+        'isPendingJoin': data is Map ? (data['isPendingJoin'] == true) : false,
       };
     } on DioException catch (e) {
       String message = 'Lỗi tải chi tiết nhóm';

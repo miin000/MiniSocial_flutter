@@ -467,13 +467,11 @@ class _PostCardState extends State<PostCard> {
                       '${widget.post.commentsCount} bình luận',
                       style: const TextStyle(color: Colors.grey),
                     ),
-                    if (widget.post.sharesCount > 0) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        '${widget.post.sharesCount} chia sẻ',
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                    ],
+                    const SizedBox(width: 8),
+                    Text(
+                      '${widget.post.sharesCount} chia sẻ',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
                   ],
                 ),
               ],
@@ -657,6 +655,15 @@ class _PostCardState extends State<PostCard> {
       postId: widget.post.id!,
       content: widget.post.content,
     );
+    if (ok && mounted) {
+      // Optimistic: increment share count in the relevant provider
+      final postProvider = Provider.of<PostProvider>(context, listen: false);
+      postProvider.incrementShareCount(widget.post.id!);
+      if (widget.post.groupId != null && widget.post.groupId!.isNotEmpty) {
+        Provider.of<GroupProvider>(context, listen: false)
+            .incrementShareOnGroupPost(widget.post.id!);
+      }
+    }
     Fluttertoast.showToast(
       msg: ok ? 'Đã chia sẻ bài viết' : 'Không thể chia sẻ',
       backgroundColor: ok ? Colors.green : Colors.red,

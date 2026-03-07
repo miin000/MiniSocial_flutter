@@ -81,6 +81,28 @@ class FriendService {
     }
   }
 
+  Future<Map<String, dynamic>> getSentRequests() async {
+    try {
+      final resp = await _api.get('/friends/requests/sent');
+      return {'success': true, 'data': resp.data};
+    } on DioException catch (e) {
+      return {'success': false, 'message': _extractMessage(e)};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> cancelSentRequest(String requestId) async {
+    try {
+      final resp = await _api.delete('/friends/requests/$requestId/cancel');
+      return {'success': true, 'data': resp.data};
+    } on DioException catch (e) {
+      return {'success': false, 'message': _extractMessage(e)};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   Future<Map<String, dynamic>> removeFriend(String friendId) async {
     try {
       final resp = await _api.delete('/friends/$friendId');

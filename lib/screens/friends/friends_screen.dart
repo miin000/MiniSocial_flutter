@@ -23,6 +23,7 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
   List<dynamic> _friends = [];
   List<dynamic> _requests = [];
   List<dynamic> _suggestions = [];
+  List<dynamic> _sentRequests = [];
   bool _loading = false;
   String _searchQuery = '';
 
@@ -47,10 +48,17 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
           return name.contains(_searchQuery.toLowerCase());
         }).toList();
 
+  List<dynamic> get _filteredSentRequests => _searchQuery.isEmpty
+      ? _sentRequests
+      : _sentRequests.where((item) {
+          final name = (item['toName'] ?? '').toString().toLowerCase();
+          return name.contains(_searchQuery.toLowerCase());
+        }).toList();
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadAll();
   }
 
@@ -66,10 +74,12 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
     final f = await _friendService.getFriends();
     final r = await _friendService.getRequests();
     final s = await _friendService.getSuggestions();
+    final sent = await _friendService.getSentRequests();
     setState(() {
       _friends = f['success'] ? (f['data'] as List<dynamic>? ?? []) : [];
       _requests = r['success'] ? (r['data'] as List<dynamic>? ?? []) : [];
       _suggestions = s['success'] ? (s['data'] as List<dynamic>? ?? []) : [];
+      _sentRequests = sent['success'] ? (sent['data'] as List<dynamic>? ?? []) : [];
       _loading = false;
     });
     // Update pending count badge
@@ -126,6 +136,28 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
               ),
             ),
             const Tab(text: 'Gợi ý'),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Đã gửi'),
+                  if (_sentRequests.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${_sentRequests.length}',
+                        style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -479,6 +511,108 @@ class _FriendsScreenState extends State<FriendsScreen> with TickerProviderStateM
                 );
               },
             ),
+          ),
+
+          // Sent requests
+          RefreshIndicator(
+            onRefresh: _loadAll,
+            child: _filteredSentRequests.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.send_outlined,
+                              size: 64, color: Colors.grey.shade300),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Chưa gửi lời mời nào',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Các lời mời kết bạn bạn đã gửi sẽ xuất hiện ở đây',
+                            style: TextStyle(color: Colors.grey.shade600),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: _filteredSentRequests.length,
+                    itemBuilder: (context, index) {
+                      final item = _filteredSentRequests[index];
+                      final name = item['toName'] ?? 'Người dùng';
+                      final avatar = item['avatar'];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              _buildAvatar(avatar, name),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600, fontSize: 15),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Đang chờ chấp nhận',
+                                      style: TextStyle(
+                                          fontSize: 13, color: Colors.orange.shade700),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton(
+                                        onPressed: () async {
+                                          final requestId = (item['requestId'] ??
+                                                  item['id'] ??
+                                                  item['_id'])
+                                              ?.toString() ??
+                                              '';
+                                          if (requestId.isEmpty) return;
+                                          final res = await _friendService
+                                              .cancelSentRequest(requestId);
+                                          if (res['success']) {
+                                            Fluttertoast.showToast(
+                                                msg: 'Đã thu hồi lời mời');
+                                            _loadAll();
+                                          } else {
+                                            Fluttertoast.showToast(
+                                                msg: res['message'] ?? 'Lỗi');
+                                          }
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.red,
+                                          side: const BorderSide(color: Colors.red),
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(20)),
+                                        ),
+                                        child: const Text('Thu hồi lời mời'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

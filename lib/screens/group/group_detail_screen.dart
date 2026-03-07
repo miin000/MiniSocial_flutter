@@ -79,6 +79,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       // Only fetch posts if user is a member — backend returns 403 for non-members
       if (joined) {
         await gp.fetchGroupPosts(group.id, refresh: true, userId: currentUserId.isNotEmpty ? currentUserId : null);
+        // Fetch pending posts: admins/mods get all, regular members get their own
+        final role = gp.currentUserRole?.toUpperCase();
+        if (role == 'ADMIN' || role == 'MODERATOR') {
+          await gp.fetchPendingPosts(group.id);
+        } else if (currentUserId.isNotEmpty) {
+          await gp.fetchMyPendingGroupPosts(group.id, currentUserId);
+        }
       }
 
       if (mounted) {
@@ -112,9 +119,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     // Use provider's currentUserRole (from API) instead of getUserRole (empty members list)
     final userRole = _mapApiRoleToMemberRole(gp.currentUserRole, isOwner);
 
-    // Admin and moderator can see the pending posts tab
+    // Admin and moderator can see (and manage) the pending posts tab
     final canManagePosts = userRole == MemberRole.owner || userRole == MemberRole.admin;
-    final tabCount = 3;
+    // All joined members see the pending tab (admins: all pending; members: their own)
+    final showPendingTab = _isJoined;
+    final tabCount = showPendingTab ? 4 : 3;
 
     if (_isLoading) {
       return const Scaffold(
@@ -231,7 +240,50 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                           const SizedBox(height: 16),
 
                           // Nút hành động - dùng _isJoined
-                          if (!_isJoined)
+                          if (!_isJoined && gp.isPendingJoinForCurrentGroup)
+                            Column(
+                              children: [
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.orange.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.hourglass_empty, color: Colors.orange.shade700, size: 18),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Đang chờ duyệt',
+                                        style: TextStyle(
+                                          color: Colors.orange.shade700,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                                    label: const Text('Hủy yêu cầu', style: TextStyle(color: Colors.red)),
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(color: Colors.red),
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    onPressed: _leaveGroup,
+                                  ),
+                                ),
+                              ],
+                            )
+                          else if (!_isJoined)
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
@@ -297,6 +349,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                         const Tab(text: "Bài viết"),
                         const Tab(text: "Thành viên"),
                         const Tab(text: "Thông tin"),
+                        if (showPendingTab) const Tab(text: "Chờ duyệt"),
                       ],
                     ),
                   ],
@@ -309,6 +362,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               _PostsTab(group: currentGroup, currentUserId: currentUserId),
               _MembersTab(group: currentGroup, currentUserId: currentUserId, userRole: userRole),
               _InfoTab(group: currentGroup),
+              if (showPendingTab) _PendingPostsTab(group: currentGroup, currentUserId: currentUserId, canManage: canManagePosts),
             ],
           ),
         ),
@@ -1089,8 +1143,9 @@ class _InfoTab extends StatelessWidget {
 class _PendingPostsTab extends StatefulWidget {
   final GroupModel group;
   final String currentUserId;
+  final bool canManage;
 
-  const _PendingPostsTab({required this.group, required this.currentUserId});
+  const _PendingPostsTab({required this.group, required this.currentUserId, this.canManage = false});
 
   @override
   State<_PendingPostsTab> createState() => _PendingPostsTabState();
@@ -1109,7 +1164,11 @@ class _PendingPostsTabState extends State<_PendingPostsTab> {
 
   Future<void> _loadPendingPosts() async {
     final gp = Provider.of<GroupProvider>(context, listen: false);
-    await gp.fetchPendingPosts(widget.group.id);
+    if (widget.canManage) {
+      await gp.fetchPendingPosts(widget.group.id);
+    } else {
+      await gp.fetchMyPendingGroupPosts(widget.group.id, widget.currentUserId);
+    }
     if (mounted) setState(() => _loaded = true);
   }
 
@@ -1117,7 +1176,8 @@ class _PendingPostsTabState extends State<_PendingPostsTab> {
   Widget build(BuildContext context) {
     return Consumer<GroupProvider>(
       builder: (context, gp, child) {
-        if (gp.isLoadingPendingPosts && !_loaded) {
+        final isLoading = widget.canManage ? gp.isLoadingPendingPosts : gp.isLoadingMyPendingPosts;
+        if (isLoading && !_loaded) {
           return const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1130,7 +1190,7 @@ class _PendingPostsTabState extends State<_PendingPostsTab> {
           );
         }
 
-        final pendingPosts = gp.pendingPosts;
+        final pendingPosts = widget.canManage ? gp.pendingPosts : gp.myPendingPosts;
 
         if (pendingPosts.isEmpty) {
           return SingleChildScrollView(
@@ -1143,12 +1203,12 @@ class _PendingPostsTabState extends State<_PendingPostsTab> {
                     Icon(Icons.check_circle_outline, size: 80, color: Colors.green[300]),
                     const SizedBox(height: 16),
                     Text(
-                      'Không có bài viết nào chờ duyệt',
+                      widget.canManage ? 'Không có bài viết nào chờ duyệt' : 'Bạn chưa có bài viết nào chờ duyệt',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.grey[700]),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Tất cả bài viết đã được xử lý',
+                      widget.canManage ? 'Tất cả bài viết đã được xử lý' : 'Các bài viết đang chờ duyệt sẽ hiển thị tại đây',
                       style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                     ),
                   ],
@@ -1168,6 +1228,7 @@ class _PendingPostsTabState extends State<_PendingPostsTab> {
               return _PendingPostCard(
                 post: post,
                 groupId: widget.group.id,
+                canManage: widget.canManage,
               );
             },
           ),
@@ -1180,8 +1241,9 @@ class _PendingPostsTabState extends State<_PendingPostsTab> {
 class _PendingPostCard extends StatelessWidget {
   final dynamic post;
   final String groupId;
+  final bool canManage;
 
-  const _PendingPostCard({required this.post, required this.groupId});
+  const _PendingPostCard({required this.post, required this.groupId, this.canManage = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1254,42 +1316,52 @@ class _PendingPostCard extends StatelessWidget {
 
             const Divider(height: 24),
 
-            // Approve / Reject buttons
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.check, color: Colors.white, size: 20),
-                    label: const Text('Duyệt'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            // Approve / Reject buttons (admins/mods only) or status badge (members)
+            if (canManage)
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.check, color: Colors.white, size: 20),
+                      label: const Text('Duyệt'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () async {
+                        final gp = Provider.of<GroupProvider>(context, listen: false);
+                        final res = await gp.approveGroupPost(groupId, post.id!);
+                        Fluttertoast.showToast(
+                          msg: res['success'] ? 'Đã duyệt bài viết!' : (res['message'] ?? 'Lỗi'),
+                          backgroundColor: res['success'] ? Colors.green : Colors.red,
+                        );
+                      },
                     ),
-                    onPressed: () async {
-                      final gp = Provider.of<GroupProvider>(context, listen: false);
-                      final res = await gp.approveGroupPost(groupId, post.id!);
-                      Fluttertoast.showToast(
-                        msg: res['success'] ? 'Đã duyệt bài viết!' : (res['message'] ?? 'Lỗi'),
-                        backgroundColor: res['success'] ? Colors.green : Colors.red,
-                      );
-                    },
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.close, color: Colors.red, size: 20),
-                    label: const Text('Từ chối', style: TextStyle(color: Colors.red)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.red),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                      label: const Text('Từ chối', style: TextStyle(color: Colors.red)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.red),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () => _showRejectDialog(context),
                     ),
-                    onPressed: () => _showRejectDialog(context),
                   ),
-                ),
-              ],
-            ),
+                ],
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.hourglass_empty, color: Colors.orange[700], size: 16),
+                  const SizedBox(width: 6),
+                  Text('Đang chờ admin duyệt', style: TextStyle(color: Colors.orange[700], fontStyle: FontStyle.italic)),
+                ],
+              ),
           ],
         ),
       ),
