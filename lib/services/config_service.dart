@@ -54,14 +54,30 @@ class ConfigService {
     try {
       final resp = await _dio.get(url);
       if (resp.statusCode == 200 && resp.data != null) {
-        if (resp.data is Map<String, dynamic>) {
+        // Handle List format from API: [{setting_key, setting_value, data_type}]
+        if (resp.data is List) {
+          final Map<String, dynamic> result = {};
+          for (final s in resp.data as List) {
+            if (s is Map<String, dynamic>) {
+              final key = s['setting_key']?.toString() ?? '';
+              final value = s['setting_value'];
+              final dataType = s['data_type']?.toString() ?? 'string';
+              if (key.isNotEmpty) {
+                if (dataType == 'number') {
+                  result[key] = int.tryParse(value?.toString() ?? '') ?? value;
+                } else if (dataType == 'boolean') {
+                  result[key] = value?.toString().toLowerCase() == 'true';
+                } else {
+                  result[key] = value;
+                }
+              }
+            }
+          }
+          _cache = result;
+        } else if (resp.data is Map<String, dynamic>) {
           _cache = Map<String, dynamic>.from(resp.data);
         } else {
-          try {
-            _cache = Map<String, dynamic>.from(resp.data);
-          } catch (_) {
-            _cache = {};
-          }
+          _cache = {};
         }
         return _cache!;
       }

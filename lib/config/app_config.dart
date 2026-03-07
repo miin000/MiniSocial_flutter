@@ -12,8 +12,8 @@ class AppConfig {
 
   // static const String apiBaseUrl = 'http://localhost:3001/api/v1';
 
-  // Next.js dev server where published config will be hosted
-  static const String flutterConfigUrl = 'http://localhost:3000/mini_social_config.json';
+  // Public settings endpoint (fallback config source)
+  static const String flutterConfigUrl = 'https://minisocial-api-ldl3.onrender.com/api/v1/settings/public';
 
   // ML Server URL (recommendation system)
   static const String mlBaseUrl = 'https://minisocial-recomendation-system.onrender.com';
@@ -21,5 +21,5 @@ class AppConfig {
   // static const String mlBaseUrl = 'http://localhost:8000';
 
   static const String appName = 'MiniSocial';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.5';
 }
