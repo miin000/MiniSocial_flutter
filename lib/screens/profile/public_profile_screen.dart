@@ -4,8 +4,16 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/user_service.dart';
+import '../../services/friend_service.dart';
+import '../../services/chat_service.dart';
+import '../../services/post_service.dart';
+import '../../models/post_model.dart';
+import '../../models/conversation_model.dart';
+import '../home/post_card.dart';
+import '../chat/chat_detail_screen.dart';
 
 class PublicProfileScreen extends StatefulWidget {
   final String userId;
@@ -18,15 +26,29 @@ class PublicProfileScreen extends StatefulWidget {
 
 class _PublicProfileScreenState extends State<PublicProfileScreen> {
   final UserService _userService = UserService();
+  final FriendService _friendService = FriendService();
+  final ChatService _chatService = ChatService();
 
   bool _isLoading = true;
   String? _errorMsg;
   Map<String, dynamic>? _profile;
 
+  // Friend status: 'none', 'friends', 'request_sent', 'request_received'
+  String _friendStatus = 'none';
+  String? _friendRequestId; // for accept/reject/cancel
+  String? _friendId; // for unfriend
+  bool _friendActionLoading = false;
+
+  // User posts
+  List<Post> _userPosts = [];
+  bool _isLoadingPosts = false;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadFriendStatus();
+    _loadUserPosts();
   }
 
   Future<void> _loadProfile() async {
@@ -38,7 +60,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     if (!mounted) return;
     if (result['success'] == true) {
       final data = result['data'];
-      // backend wraps in { data: {...} } or returns object directly
       setState(() {
         _profile = (data is Map && data['data'] is Map)
             ? Map<String, dynamic>.from(data['data'])
@@ -50,6 +71,111 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         _errorMsg = result['message'] ?? 'Không thể tải hồ sơ';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadFriendStatus() async {
+    final result = await _friendService.checkFriendship(widget.userId);
+    if (!mounted) return;
+    if (result['success'] == true) {
+      final data = result['data'];
+      setState(() {
+        _friendStatus = data['status'] ?? 'none';
+        _friendRequestId = data['requestId']?.toString();
+        _friendId = data['friendId']?.toString();
+      });
+    }
+  }
+
+  Future<void> _loadUserPosts() async {
+    setState(() => _isLoadingPosts = true);
+    final currentUserId = context.read<AuthProvider>().user?.id ?? '';
+    final svc = PostService();
+    final res = await svc.getUserPosts(widget.userId, currentUserId: currentUserId);
+    if (!mounted) return;
+    if (res['success'] == true) {
+      final data = res['data'];
+      final postsList = data is Map ? (data['posts'] as List? ?? []) : (data as List? ?? []);
+      setState(() {
+        _userPosts = postsList.map((p) => Post.fromJson(p as Map<String, dynamic>)).toList();
+        _isLoadingPosts = false;
+      });
+    } else {
+      setState(() => _isLoadingPosts = false);
+    }
+  }
+
+  Future<void> _handleFriendAction() async {
+    setState(() => _friendActionLoading = true);
+    try {
+      switch (_friendStatus) {
+        case 'none':
+          final res = await _friendService.sendRequest(widget.userId);
+          if (res['success'] == true) {
+            Fluttertoast.showToast(msg: 'Đã gửi lời mời kết bạn');
+            await _loadFriendStatus();
+          } else {
+            Fluttertoast.showToast(msg: res['message'] ?? 'Lỗi');
+          }
+          break;
+        case 'request_sent':
+          if (_friendRequestId != null) {
+            final res = await _friendService.cancelSentRequest(_friendRequestId!);
+            if (res['success'] == true) {
+              Fluttertoast.showToast(msg: 'Đã hủy lời mời');
+              await _loadFriendStatus();
+            }
+          }
+          break;
+        case 'request_received':
+          if (_friendRequestId != null) {
+            final res = await _friendService.acceptRequest(_friendRequestId!);
+            if (res['success'] == true) {
+              Fluttertoast.showToast(msg: 'Đã chấp nhận lời mời');
+              await _loadFriendStatus();
+            }
+          }
+          break;
+        case 'friends':
+          // Show unfriend confirmation
+          final confirm = await showDialog<bool>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Hủy kết bạn'),
+              content: const Text('Bạn có chắc muốn hủy kết bạn?'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Xác nhận'),
+                ),
+              ],
+            ),
+          );
+          if (confirm == true) {
+            final res = await _friendService.removeFriend(widget.userId);
+            if (res['success'] == true) {
+              Fluttertoast.showToast(msg: 'Đã hủy kết bạn');
+              await _loadFriendStatus();
+            }
+          }
+          break;
+      }
+    } finally {
+      if (mounted) setState(() => _friendActionLoading = false);
+    }
+  }
+
+  Future<void> _handleMessage() async {
+    final result = await _chatService.createPrivateChat(widget.userId);
+    if (!mounted) return;
+    if (result['success'] == true) {
+      final convData = result['data'];
+      final conv = ConversationModel.fromJson(convData is Map<String, dynamic> ? convData : {});
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ChatDetailScreen(conversation: conv)));
+    } else {
+      Fluttertoast.showToast(msg: result['message'] ?? 'Không thể mở chat');
     }
   }
 
@@ -189,6 +315,41 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                     style: TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic)),
 
               const SizedBox(height: 16),
+
+              // ── Friend / Message buttons ──────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _friendActionLoading ? null : _handleFriendAction,
+                      icon: _friendActionLoading
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(_friendButtonIcon),
+                      label: Text(_friendButtonLabel),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _friendButtonColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _handleMessage,
+                      icon: const Icon(Icons.message),
+                      label: const Text('Nhắn tin'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF1877F2),
+                        side: const BorderSide(color: Color(0xFF1877F2)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 8),
 
@@ -214,8 +375,58 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
             ],
           ),
         ),
+
+        // ── User posts section ────────────────────────────
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Bài viết', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+        ),
+        if (_isLoadingPosts)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_userPosts.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: Text('Chưa có bài viết nào', style: TextStyle(color: Colors.grey[500])),
+            ),
+          )
+        else
+          ..._userPosts.map((post) => PostCard(post: post)),
       ],
     );
+  }
+
+  String get _friendButtonLabel {
+    switch (_friendStatus) {
+      case 'friends': return 'Bạn bè';
+      case 'request_sent': return 'Đã gửi lời mời';
+      case 'request_received': return 'Chấp nhận';
+      default: return 'Kết bạn';
+    }
+  }
+
+  IconData get _friendButtonIcon {
+    switch (_friendStatus) {
+      case 'friends': return Icons.people;
+      case 'request_sent': return Icons.hourglass_top;
+      case 'request_received': return Icons.person_add;
+      default: return Icons.person_add_alt_1;
+    }
+  }
+
+  Color get _friendButtonColor {
+    switch (_friendStatus) {
+      case 'friends': return Colors.green;
+      case 'request_sent': return Colors.orange;
+      case 'request_received': return const Color(0xFF1877F2);
+      default: return const Color(0xFF1877F2);
+    }
   }
 
   Widget _buildInfoRow(IconData icon, String text) {

@@ -6,6 +6,17 @@ import 'api_service.dart';
 class FriendService {
   final ApiService _api = ApiService();
 
+  Future<Map<String, dynamic>> checkFriendship(String userId) async {
+    try {
+      final resp = await _api.get('/friends/check/$userId');
+      return {'success': true, 'data': resp.data};
+    } on DioException catch (e) {
+      return {'success': false, 'message': _extractMessage(e)};
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   Future<Map<String, dynamic>> getFriends({int page = 1, int limit = 20}) async {
     try {
       final resp = await _api.get('/friends', queryParameters: {

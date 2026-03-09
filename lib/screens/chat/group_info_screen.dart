@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/conversation_model.dart';
 import '../../models/message_model.dart';
 import '../../services/chat_service.dart';
+import '../../services/cloudinary_service.dart';
 
 class GroupInfoScreen extends StatefulWidget {
   final ConversationModel conversation;
@@ -64,6 +66,21 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     if (newName != null && newName.isNotEmpty && newName != widget.conversation.name) {
       final ok = await context.read<ChatProvider>().updateGroup(widget.conversation.id, name: newName);
       if (ok) Fluttertoast.showToast(msg: 'Đã đổi tên nhóm');
+    }
+  }
+
+  Future<void> _changeAvatar() async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (file == null) return;
+    try {
+      final url = await CloudinaryService().uploadXFile(file);
+      if (url != null && mounted) {
+        final ok = await context.read<ChatProvider>().updateGroup(widget.conversation.id, avatarUrl: url);
+        if (ok) Fluttertoast.showToast(msg: 'Đã đổi ảnh nhóm');
+      }
+    } catch (e) {
+      Fluttertoast.showToast(msg: 'Lỗi upload ảnh: $e');
     }
   }
 
@@ -392,6 +409,11 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                   leading: const Icon(Icons.edit, color: Color(0xFF3b82f6)),
                   title: const Text('Đổi tên nhóm'),
                   onTap: _editGroupName,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt, color: Color(0xFF3b82f6)),
+                  title: const Text('Đổi ảnh nhóm'),
+                  onTap: _changeAvatar,
                 ),
                 ListTile(
                   leading: const Icon(Icons.person_add, color: Color(0xFF3b82f6)),

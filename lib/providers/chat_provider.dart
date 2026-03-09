@@ -20,6 +20,7 @@ class ChatProvider with ChangeNotifier {
   String? _error;
   Map<String, int> _currentPage = {};
   Map<String, bool> _hasMore = {};
+  String? _currentUserId; // API user ID for Firestore queries
   // Firestore realtime subscriptions
   StreamSubscription<QuerySnapshot>? _conversationsSubscription;
   final Map<String, StreamSubscription<QuerySnapshot>> _messagesSubscriptions = {};
@@ -44,7 +45,8 @@ class ChatProvider with ChangeNotifier {
 
   // ── Conversations ────────────────────────────────────────────────────────
 
-  Future<void> fetchConversations() async {
+  Future<void> fetchConversations({String? userId}) async {
+    if (userId != null) _currentUserId = userId;
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -70,7 +72,8 @@ class ChatProvider with ChangeNotifier {
     notifyListeners();
 
     // Bắt đầu Firestore listener sau khi load xong REST
-    final uid = fb_auth.FirebaseAuth.instance.currentUser?.uid;
+    // Try Firebase Auth UID first, fallback to API user ID
+    final uid = fb_auth.FirebaseAuth.instance.currentUser?.uid ?? _currentUserId;
     if (uid != null) _startConversationsListener(uid);
   }
 
@@ -433,7 +436,7 @@ class ChatProvider with ChangeNotifier {
   /// Bắt đầu lắng nghe tin nhắn mới trong một cuộc trò chuyện qua Firestore
   void startMessagesListener(String convId) {
     if (_messagesSubscriptions.containsKey(convId)) return;
-    final uid = fb_auth.FirebaseAuth.instance.currentUser?.uid;
+    final uid = fb_auth.FirebaseAuth.instance.currentUser?.uid ?? _currentUserId;
     if (uid == null) return;
     final sub = FirebaseFirestore.instance
         .collection('chats')

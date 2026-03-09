@@ -33,6 +33,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   MessageModel? _replyTo;
   bool _isSending = false;
   late final ChatProvider _chatProvider;
+  String? _blockStatus; // 'blocked_by_me', 'blocked_by_other', null
 
   @override
   void initState() {
@@ -42,9 +43,30 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       await _chatProvider.fetchMessages(widget.conversation.id, refresh: true);
       if (mounted) {
         _chatProvider.startMessagesListener(widget.conversation.id);
+        _checkBlockStatus();
       }
     });
     _scrollController.addListener(_onScroll);
+  }
+
+  Future<void> _checkBlockStatus() async {
+    if (widget.conversation.type != 'private') return;
+    final currentUserId = context.read<AuthProvider>().user?.id ?? '';
+    await _chatProvider.fetchMembers(widget.conversation.id);
+    final members = _chatProvider.getMembers(widget.conversation.id);
+    for (final m in members) {
+      if (m.userId == currentUserId && m.blockedBy != null && m.blockedBy!.isNotEmpty) {
+        // Current user is blocked by the other person
+        if (mounted) setState(() => _blockStatus = 'blocked_by_other');
+        return;
+      }
+      if (m.userId != currentUserId && m.blockedBy == currentUserId) {
+        // Current user blocked the other person
+        if (mounted) setState(() => _blockStatus = 'blocked_by_me');
+        return;
+      }
+    }
+    if (mounted) setState(() => _blockStatus = null);
   }
 
   void _onScroll() {
@@ -248,6 +270,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     msg: 'Đã chặn người dùng',
                     backgroundColor: Colors.green,
                   );
+                  _checkBlockStatus();
                 } else {
                   Fluttertoast.showToast(
                     msg: result['message'] ?? 'Lỗi chặn người dùng',
@@ -267,6 +290,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     msg: 'Đã bỏ chặn người dùng',
                     backgroundColor: Colors.green,
                   );
+                  _checkBlockStatus();
                 } else {
                   Fluttertoast.showToast(
                     msg: result['message'] ?? 'Lỗi bỏ chặn',
@@ -419,7 +443,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           ),
 
           // ── Reply preview ───────────────────────────────────
-          if (_replyTo != null)
+          if (_replyTo != null && _blockStatus == null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               color: Colors.blue.shade50,
@@ -448,7 +472,26 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
             ),
 
-          // ── Input area ──────────────────────────────────────
+          // ── Block banner / Input area ──────────────────────
+          if (_blockStatus != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                boxShadow: [BoxShadow(color: Colors.grey.shade200, blurRadius: 4, offset: const Offset(0, -1))],
+              ),
+              child: SafeArea(
+                child: Center(
+                  child: Text(
+                    _blockStatus == 'blocked_by_other'
+                        ? 'Bạn đã bị chặn bởi người này'
+                        : 'Bạn đã chặn người này',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                  ),
+                ),
+              ),
+            )
+          else
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(

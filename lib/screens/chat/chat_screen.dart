@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../providers/chat_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../models/conversation_model.dart';
 import 'chat_detail_screen.dart';
 import 'create_group_screen.dart';
@@ -25,7 +26,8 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().fetchConversations();
+      final userId = context.read<AuthProvider>().user?.id;
+      context.read<ChatProvider>().fetchConversations(userId: userId);
     });
   }
 
@@ -36,7 +38,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _refresh() async {
-    await context.read<ChatProvider>().fetchConversations();
+    final userId = context.read<AuthProvider>().user?.id;
+    await context.read<ChatProvider>().fetchConversations(userId: userId);
   }
 
   @override

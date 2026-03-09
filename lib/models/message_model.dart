@@ -180,6 +180,7 @@ class ParticipantModel {
   final DateTime? joinedAt;
   final DateTime? leftAt;
   final bool isMuted;
+  final String? blockedBy;
 
   // Enriched
   final Map<String, dynamic>? userInfo;
@@ -193,6 +194,7 @@ class ParticipantModel {
     this.joinedAt,
     this.leftAt,
     this.isMuted = false,
+    this.blockedBy,
     this.userInfo,
   });
 
@@ -210,6 +212,7 @@ class ParticipantModel {
           ? DateTime.tryParse(json['left_at'].toString())
           : null,
       isMuted: json['is_muted'] ?? false,
+      blockedBy: json['blocked_by']?.toString(),
       userInfo: json['user_info'] is Map
           ? Map<String, dynamic>.from(json['user_info'])
           : null,

@@ -27,6 +27,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
   final PostService _postService = PostService(ApiService().dio);
   List<Comment> _comments = [];
   bool _isLoading = false;
+  bool _isSendingComment = false;
   String? _replyToCommentId;
   String? _replyToUserName;
 
@@ -91,6 +92,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
   Future<void> _addComment() async {
     final content = _commentController.text.trim();
     if (content.isEmpty) return;
+    if (_isSendingComment) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final postProvider = Provider.of<PostProvider>(context, listen: false);
@@ -104,6 +106,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
       return;
     }
 
+    setState(() => _isSendingComment = true);
+    _commentController.clear();
+
     try {
       final comment = await postProvider.createComment(
         userId: userId,
@@ -113,7 +118,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
       );
 
       if (comment != null) {
-        _commentController.clear();
         setState(() {
           _replyToCommentId = null;
           _replyToUserName = null;
@@ -136,6 +140,8 @@ class _CommentsScreenState extends State<CommentsScreen> {
         msg: 'Lỗi khi thêm bình luận',
         backgroundColor: Colors.red,
       );
+    } finally {
+      if (mounted) setState(() => _isSendingComment = false);
     }
   }
 
@@ -270,8 +276,8 @@ class _CommentsScreenState extends State<CommentsScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.send, color: Color(0xFF3b82f6)),
-                  onPressed: _addComment,
+                  icon: Icon(Icons.send, color: _isSendingComment ? Colors.grey : const Color(0xFF3b82f6)),
+                  onPressed: _isSendingComment ? null : _addComment,
                 ),
               ],
             ),

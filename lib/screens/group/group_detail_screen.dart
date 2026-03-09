@@ -121,8 +121,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     // Admin and moderator can see (and manage) the pending posts tab
     final canManagePosts = userRole == MemberRole.owner || userRole == MemberRole.admin;
-    // All joined members see the pending tab (admins: all pending; members: their own)
-    final showPendingTab = _isJoined;
+    // Only admins/owners see the pending tab
+    final showPendingTab = _isJoined && canManagePosts;
     final tabCount = showPendingTab ? 4 : 3;
 
     if (_isLoading) {
