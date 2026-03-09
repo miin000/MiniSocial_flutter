@@ -28,6 +28,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
   List<Comment> _comments = [];
   bool _isLoading = false;
   bool _isSendingComment = false;
+  DateTime? _lastCommentTime;
   String? _replyToCommentId;
   String? _replyToUserName;
 
@@ -93,6 +94,15 @@ class _CommentsScreenState extends State<CommentsScreen> {
     final content = _commentController.text.trim();
     if (content.isEmpty) return;
     if (_isSendingComment) return;
+    // Cooldown: prevent rapid comment submissions (2 seconds)
+    if (_lastCommentTime != null &&
+        DateTime.now().difference(_lastCommentTime!).inSeconds < 2) {
+      Fluttertoast.showToast(
+        msg: 'Vui lòng chờ vài giây trước khi gửi tiếp',
+        backgroundColor: Colors.orange,
+      );
+      return;
+    }
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final postProvider = Provider.of<PostProvider>(context, listen: false);
@@ -118,6 +128,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
       );
 
       if (comment != null) {
+        _lastCommentTime = DateTime.now();
         setState(() {
           _replyToCommentId = null;
           _replyToUserName = null;

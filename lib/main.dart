@@ -23,6 +23,9 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/maintenance_screen.dart';
+import 'services/api_service.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 /// Global flag: Firebase đã khởi tạo thành công chưa
 // Đã chuyển sang config/firebase_config.dart
@@ -90,8 +93,49 @@ Future<void> _setupFirebaseMessaging() async {
   });
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    ApiService.onForceLogout = _handleForceLogout;
+  }
+
+  void _handleForceLogout() {
+    final ctx = navigatorKey.currentContext;
+    if (ctx != null) {
+      final authProvider = Provider.of<AuthProvider>(ctx, listen: false);
+      authProvider.logout();
+      final msg = ApiService.forceLogoutMessage ?? 'Tài khoản của bạn đã bị khóa do vi phạm chính sách cộng đồng.';
+      ApiService.forceLogoutMessage = null;
+      navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
+      // Show ban message after navigation
+      Future.delayed(const Duration(milliseconds: 300), () {
+        final navCtx = navigatorKey.currentContext;
+        if (navCtx != null) {
+          showDialog(
+            context: navCtx,
+            builder: (_) => AlertDialog(
+              title: const Text('Tài khoản bị khóa'),
+              content: Text(msg),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(navCtx),
+                  child: const Text('Đã hiểu'),
+                ),
+              ],
+            ),
+          );
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +150,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => RecommendationProvider()),
       ],
       child: MaterialApp(
+        navigatorKey: navigatorKey,
         title: 'MiniSocial',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(

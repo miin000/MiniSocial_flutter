@@ -1,6 +1,7 @@
 // lib/services/api_service.dart
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 
@@ -10,6 +11,10 @@ class ApiService {
   
   late Dio _dio;
   String? _token;
+
+  /// Called when a banned user receives 401 with blocked message
+  static VoidCallback? onForceLogout;
+  static String? forceLogoutMessage;
 
   ApiService._internal() {
     _dio = Dio(BaseOptions(
@@ -32,8 +37,15 @@ class ApiService {
       onError: (error, handler) {
         // Xử lý lỗi 401 - Unauthorized
         if (error.response?.statusCode == 401) {
-          // Token hết hạn hoặc không hợp lệ
-          clearToken();
+          final msg = error.response?.data?['message']?.toString() ?? '';
+          // Blocked user → force logout with ban message
+          if (msg.toLowerCase().contains('block') || msg.toLowerCase().contains('khóa')) {
+            clearToken();
+            forceLogoutMessage = msg;
+            onForceLogout?.call();
+          } else {
+            clearToken();
+          }
         }
         return handler.next(error);
       },

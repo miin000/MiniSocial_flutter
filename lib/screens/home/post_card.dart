@@ -25,11 +25,25 @@ class PostCard extends StatefulWidget {
 
 class _PostCardState extends State<PostCard> {
   int _currentImageIndex = 0;
+  late bool _isLiked;
+  late int _likesCount;
 
   @override
   void initState() {
     super.initState();
+    _isLiked = widget.post.isLiked ?? false;
+    _likesCount = widget.post.likesCount;
     timeago.setLocaleMessages('vi', timeago.ViMessages());
+  }
+
+  @override
+  void didUpdateWidget(covariant PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.id != widget.post.id ||
+        oldWidget.post.isLiked != widget.post.isLiked) {
+      _isLiked = widget.post.isLiked ?? false;
+      _likesCount = widget.post.likesCount;
+    }
   }
 
   void _openUserProfile(String? userId) {
@@ -458,7 +472,7 @@ class _PostCardState extends State<PostCard> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${widget.post.likesCount} lượt thích',
+                  '$_likesCount lượt thích',
                   style: const TextStyle(color: Colors.grey),
                 ),
                 Row(
@@ -486,6 +500,10 @@ class _PostCardState extends State<PostCard> {
             children: [
               TextButton.icon(
                 onPressed: () {
+                  setState(() {
+                    _isLiked = !_isLiked;
+                    _likesCount += _isLiked ? 1 : -1;
+                  });
                   if (widget.post.groupId != null) {
                     final gp = Provider.of<GroupProvider>(context, listen: false);
                     gp.toggleLikeOnGroupPost(widget.post.id!, userId);
@@ -494,13 +512,13 @@ class _PostCardState extends State<PostCard> {
                   }
                 },
                 icon: Icon(
-                  widget.post.isLiked == true ? Icons.favorite : Icons.favorite_border,
-                  color: widget.post.isLiked == true ? Colors.red : Colors.grey,
+                  _isLiked ? Icons.favorite : Icons.favorite_border,
+                  color: _isLiked ? Colors.red : Colors.grey,
                 ),
                 label: Text(
                   'Thích',
                   style: TextStyle(
-                    color: widget.post.isLiked == true ? Colors.red : Colors.grey,
+                    color: _isLiked ? Colors.red : Colors.grey,
                   ),
                 ),
               ),

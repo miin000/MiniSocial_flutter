@@ -10,6 +10,7 @@ import '../../services/user_service.dart';
 import '../../services/friend_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/post_service.dart';
+import '../../services/api_service.dart';
 import '../../models/post_model.dart';
 import '../../models/conversation_model.dart';
 import '../home/post_card.dart';
@@ -89,19 +90,18 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
 
   Future<void> _loadUserPosts() async {
     setState(() => _isLoadingPosts = true);
-    final currentUserId = context.read<AuthProvider>().user?.id ?? '';
-    final svc = PostService();
-    final res = await svc.getUserPosts(widget.userId, currentUserId: currentUserId);
-    if (!mounted) return;
-    if (res['success'] == true) {
-      final data = res['data'];
-      final postsList = data is Map ? (data['posts'] as List? ?? []) : (data as List? ?? []);
+    try {
+      final currentUserId = context.read<AuthProvider>().user?.id ?? '';
+      final svc = PostService(ApiService().dio);
+      final res = await svc.getUserPosts(widget.userId, currentUserId: currentUserId);
+      if (!mounted) return;
+      final posts = res['posts'] as List<Post>? ?? [];
       setState(() {
-        _userPosts = postsList.map((p) => Post.fromJson(p as Map<String, dynamic>)).toList();
+        _userPosts = posts;
         _isLoadingPosts = false;
       });
-    } else {
-      setState(() => _isLoadingPosts = false);
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingPosts = false);
     }
   }
 
@@ -405,7 +405,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   String get _friendButtonLabel {
     switch (_friendStatus) {
       case 'friends': return 'Bạn bè';
-      case 'request_sent': return 'Đã gửi lời mời';
+      case 'request_sent': return 'Hủy yêu cầu KB';
       case 'request_received': return 'Chấp nhận';
       default: return 'Kết bạn';
     }

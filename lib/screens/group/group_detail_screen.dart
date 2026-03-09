@@ -121,9 +121,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     // Admin and moderator can see (and manage) the pending posts tab
     final canManagePosts = userRole == MemberRole.owner || userRole == MemberRole.admin;
-    // Only admins/owners see the pending tab
-    final showPendingTab = _isJoined && canManagePosts;
-    final tabCount = showPendingTab ? 4 : 3;
+    final tabCount = 3;
 
     if (_isLoading) {
       return const Scaffold(
@@ -349,7 +347,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                         const Tab(text: "Bài viết"),
                         const Tab(text: "Thành viên"),
                         const Tab(text: "Thông tin"),
-                        if (showPendingTab) const Tab(text: "Chờ duyệt"),
                       ],
                     ),
                   ],
@@ -362,7 +359,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               _PostsTab(group: currentGroup, currentUserId: currentUserId),
               _MembersTab(group: currentGroup, currentUserId: currentUserId, userRole: userRole),
               _InfoTab(group: currentGroup),
-              if (showPendingTab) _PendingPostsTab(group: currentGroup, currentUserId: currentUserId, canManage: canManagePosts),
             ],
           ),
         ),

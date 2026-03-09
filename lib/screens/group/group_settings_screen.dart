@@ -1,6 +1,6 @@
 ﻿// lib/screens/group/group_settings_screen.dart
 
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -32,8 +32,10 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
   bool _isEditing = false;
 
   // for avatar/cover
-  File? _newAvatar;
-  File? _newCover;
+  XFile? _newAvatar;
+  XFile? _newCover;
+  Uint8List? _avatarBytes;
+  Uint8List? _coverBytes;
 
   // Approval toggles
   late bool _requireMemberApproval;
@@ -286,6 +288,38 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
                   _editField(controller: _descController, label: 'Mô tả nhóm',
                       icon: Icons.notes_rounded, maxLines: 3),
                   const SizedBox(height: 16),
+                  // Avatar picker
+                  _imagePickerTile(
+                    label: 'Ảnh đại diện nhóm',
+                    icon: Icons.account_circle_rounded,
+                    currentUrl: group.avatar,
+                    pickedBytes: _avatarBytes,
+                    onPick: () async {
+                      final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+                      if (picked != null) {
+                        final bytes = await picked.readAsBytes();
+                        setState(() { _newAvatar = picked; _avatarBytes = bytes; });
+                      }
+                    },
+                    onClear: () => setState(() { _newAvatar = null; _avatarBytes = null; }),
+                  ),
+                  const SizedBox(height: 12),
+                  // Cover picker
+                  _imagePickerTile(
+                    label: 'Ảnh bìa nhóm',
+                    icon: Icons.panorama_rounded,
+                    currentUrl: group.coverUrl,
+                    pickedBytes: _coverBytes,
+                    onPick: () async {
+                      final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+                      if (picked != null) {
+                        final bytes = await picked.readAsBytes();
+                        setState(() { _newCover = picked; _coverBytes = bytes; });
+                      }
+                    },
+                    onClear: () => setState(() { _newCover = null; _coverBytes = null; }),
+                  ),
+                  const SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
@@ -294,6 +328,8 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
                                 _isEditing = false;
                                 _newAvatar = null;
                                 _newCover = null;
+                                _avatarBytes = null;
+                                _coverBytes = null;
                               }),
                           icon: const Icon(Icons.close_rounded, size: 17),
                           label: const Text('Hủy'),
@@ -321,13 +357,13 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
                             String? avatarUrl;
                             String? coverUrl;
                             if (_newAvatar != null) {
-                              avatarUrl = await CloudinaryService().uploadImage(_newAvatar!.path);
+                              avatarUrl = await CloudinaryService().uploadXFile(_newAvatar!);
                               if (avatarUrl == null) {
                                 Fluttertoast.showToast(msg: 'Upload avatar thất bại', backgroundColor: Colors.orange);
                               }
                             }
                             if (_newCover != null) {
-                              coverUrl = await CloudinaryService().uploadImage(_newCover!.path);
+                              coverUrl = await CloudinaryService().uploadXFile(_newCover!);
                               if (coverUrl == null) {
                                 Fluttertoast.showToast(msg: 'Upload cover thất bại', backgroundColor: Colors.orange);
                               }
@@ -777,6 +813,70 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen>
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
+    );
+  }
+
+  Widget _imagePickerTile({
+    required String label,
+    required IconData icon,
+    required String? currentUrl,
+    required Uint8List? pickedBytes,
+    required VoidCallback onPick,
+    required VoidCallback onClear,
+  }) {
+    return InkWell(
+      onTap: onPick,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48, height: 48,
+              decoration: BoxDecoration(
+                color: _blueLight, borderRadius: BorderRadius.circular(10)),
+              clipBehavior: Clip.antiAlias,
+              child: pickedBytes != null
+                  ? Image.memory(pickedBytes, fit: BoxFit.cover, width: 48, height: 48)
+                  : (currentUrl != null && currentUrl.isNotEmpty)
+                      ? Image.network(currentUrl, fit: BoxFit.cover, width: 48, height: 48,
+                          errorBuilder: (_, __, ___) => Icon(icon, color: _blue, size: 24))
+                      : Icon(icon, color: _blue, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1e293b))),
+                  const SizedBox(height: 2),
+                  Text(pickedBytes != null ? 'Đã chọn ảnh mới' : 'Nhấn để thay đổi',
+                      style: TextStyle(fontSize: 12,
+                          color: pickedBytes != null ? _green : const Color(0xFF94a3b8))),
+                ],
+              ),
+            ),
+            if (pickedBytes != null)
+              GestureDetector(
+                onTap: onClear,
+                child: Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.close_rounded, size: 16, color: _red),
+                ),
+              )
+            else
+              const Icon(Icons.camera_alt_rounded, size: 20, color: Color(0xFF94a3b8)),
+          ],
+        ),
       ),
     );
   }
