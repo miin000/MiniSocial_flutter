@@ -37,7 +37,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   // Friend status: 'none', 'friends', 'request_sent', 'request_received'
   String _friendStatus = 'none';
   String? _friendRequestId; // for accept/reject/cancel
-  String? _friendId; // for unfriend
   bool _friendActionLoading = false;
 
   // User posts
@@ -83,7 +82,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       setState(() {
         _friendStatus = data['status'] ?? 'none';
         _friendRequestId = data['requestId']?.toString();
-        _friendId = data['friendId']?.toString();
       });
     }
   }
@@ -93,7 +91,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     try {
       final currentUserId = context.read<AuthProvider>().user?.id ?? '';
       final svc = PostService(ApiService().dio);
-      final res = await svc.getUserPosts(widget.userId, currentUserId: currentUserId);
+      final res = await svc.getUserPosts(
+        widget.userId,
+        currentUserId: currentUserId,
+      );
       if (!mounted) return;
       final posts = res['posts'] as List<Post>? ?? [];
       setState(() {
@@ -120,7 +121,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           break;
         case 'request_sent':
           if (_friendRequestId != null) {
-            final res = await _friendService.cancelSentRequest(_friendRequestId!);
+            final res = await _friendService.cancelSentRequest(
+              _friendRequestId!,
+            );
             if (res['success'] == true) {
               Fluttertoast.showToast(msg: 'Đã hủy lời mời');
               await _loadFriendStatus();
@@ -144,7 +147,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               title: const Text('Hủy kết bạn'),
               content: const Text('Bạn có chắc muốn hủy kết bạn?'),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Hủy'),
+                ),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, true),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -172,8 +178,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     if (!mounted) return;
     if (result['success'] == true) {
       final convData = result['data'];
-      final conv = ConversationModel.fromJson(convData is Map<String, dynamic> ? convData : {});
-      Navigator.push(context, MaterialPageRoute(builder: (_) => ChatDetailScreen(conversation: conv)));
+      final conv = ConversationModel.fromJson(
+        convData is Map<String, dynamic> ? convData : {},
+      );
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ChatDetailScreen(conversation: conv)),
+      );
     } else {
       Fluttertoast.showToast(msg: result['message'] ?? 'Không thể mở chat');
     }
@@ -186,45 +197,51 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
 
     // Redirect self to own profile tab
     if (widget.userId == currentUserId) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.pop(context));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => Navigator.pop(context),
+      );
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_profile != null
-            ? (_profile!['full_name'] ?? _profile!['username'] ?? 'Hồ sơ')
-            : 'Hồ sơ'),
+        title: Text(
+          _profile != null
+              ? (_profile!['full_name'] ?? _profile!['username'] ?? 'Hồ sơ')
+              : 'Hồ sơ',
+        ),
         backgroundColor: const Color(0xFF1877F2),
         foregroundColor: Colors.white,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMsg != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
-                      const SizedBox(height: 16),
-                      Text(_errorMsg!,
-                          style: const TextStyle(color: Colors.grey, fontSize: 15),
-                          textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadProfile,
-                        child: const Text('Thử lại'),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    _errorMsg!,
+                    style: const TextStyle(color: Colors.grey, fontSize: 15),
+                    textAlign: TextAlign.center,
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadProfile,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: _buildContent(),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _loadProfile,
+                    child: const Text('Thử lại'),
                   ),
-                ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadProfile,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: _buildContent(),
+              ),
+            ),
     );
   }
 
@@ -244,7 +261,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     final createdAt = p['created_at'] != null
         ? DateTime.tryParse(p['created_at'].toString())
         : null;
-    final displayName = fullName?.isNotEmpty == true ? fullName! : username ?? 'Người dùng';
+    final displayName = fullName?.isNotEmpty == true
+        ? fullName!
+        : username ?? 'Người dùng';
     final initial = displayName[0].toUpperCase();
 
     return Column(
@@ -281,11 +300,22 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                               width: 104,
                               height: 104,
                               fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) =>
-                                  Text(initial, style: const TextStyle(fontSize: 40, color: Colors.white)),
+                              errorWidget: (_, __, ___) => Text(
+                                initial,
+                                style: const TextStyle(
+                                  fontSize: 40,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
                           )
-                        : Text(initial, style: const TextStyle(fontSize: 40, color: Colors.white)),
+                        : Text(
+                            initial,
+                            style: const TextStyle(
+                              fontSize: 40,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -296,23 +326,38 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               // Name
               Text(
                 displayName,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
                 textAlign: TextAlign.center,
               ),
-              if (username != null && username.isNotEmpty && username != fullName)
-                Text('@$username',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+              if (username != null &&
+                  username.isNotEmpty &&
+                  username != fullName)
+                Text(
+                  '@$username',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                ),
 
               const SizedBox(height: 8),
 
               // Bio
               if (bio != null && bio.isNotEmpty)
-                Text(bio,
-                    style: const TextStyle(fontSize: 14, color: Colors.black87),
-                    textAlign: TextAlign.center)
+                Text(
+                  bio,
+                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                  textAlign: TextAlign.center,
+                )
               else
-                const Text('Chưa có tiểu sử',
-                    style: TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic)),
+                const Text(
+                  'Chưa có tiểu sử',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
 
               const SizedBox(height: 16),
 
@@ -321,15 +366,23 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _friendActionLoading ? null : _handleFriendAction,
+                      onPressed: _friendActionLoading
+                          ? null
+                          : _handleFriendAction,
                       icon: _friendActionLoading
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : Icon(_friendButtonIcon),
                       label: Text(_friendButtonLabel),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _friendButtonColor,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -342,7 +395,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFF1877F2),
                         side: const BorderSide(color: Color(0xFF1877F2)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -354,13 +409,18 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               const SizedBox(height: 8),
 
               // Info rows
-              if (job != null && job.isNotEmpty) _buildInfoRow(Icons.work_outline, job),
+              if (job != null && job.isNotEmpty)
+                _buildInfoRow(Icons.work_outline, job),
               if (location != null && location.isNotEmpty)
                 _buildInfoRow(Icons.location_on_outlined, location),
               if (gender != null && gender.isNotEmpty)
                 _buildInfoRow(
                   Icons.wc_outlined,
-                  gender == 'male' ? 'Nam' : gender == 'female' ? 'Nữ' : 'Khác',
+                  gender == 'male'
+                      ? 'Nam'
+                      : gender == 'female'
+                      ? 'Nữ'
+                      : 'Khác',
                 ),
               if (birthdate != null)
                 _buildInfoRow(
@@ -381,7 +441,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text('Bài viết', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            child: Text(
+              'Bài viết',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ),
         ),
         if (_isLoadingPosts)
@@ -393,7 +456,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           Padding(
             padding: const EdgeInsets.all(24),
             child: Center(
-              child: Text('Chưa có bài viết nào', style: TextStyle(color: Colors.grey[500])),
+              child: Text(
+                'Chưa có bài viết nào',
+                style: TextStyle(color: Colors.grey[500]),
+              ),
             ),
           )
         else
@@ -404,28 +470,40 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
 
   String get _friendButtonLabel {
     switch (_friendStatus) {
-      case 'friends': return 'Bạn bè';
-      case 'request_sent': return 'Hủy yêu cầu KB';
-      case 'request_received': return 'Chấp nhận';
-      default: return 'Kết bạn';
+      case 'friends':
+        return 'Bạn bè';
+      case 'request_sent':
+        return 'Hủy yêu cầu KB';
+      case 'request_received':
+        return 'Chấp nhận';
+      default:
+        return 'Kết bạn';
     }
   }
 
   IconData get _friendButtonIcon {
     switch (_friendStatus) {
-      case 'friends': return Icons.people;
-      case 'request_sent': return Icons.hourglass_top;
-      case 'request_received': return Icons.person_add;
-      default: return Icons.person_add_alt_1;
+      case 'friends':
+        return Icons.people;
+      case 'request_sent':
+        return Icons.hourglass_top;
+      case 'request_received':
+        return Icons.person_add;
+      default:
+        return Icons.person_add_alt_1;
     }
   }
 
   Color get _friendButtonColor {
     switch (_friendStatus) {
-      case 'friends': return Colors.green;
-      case 'request_sent': return Colors.orange;
-      case 'request_received': return const Color(0xFF1877F2);
-      default: return const Color(0xFF1877F2);
+      case 'friends':
+        return Colors.green;
+      case 'request_sent':
+        return Colors.orange;
+      case 'request_received':
+        return const Color(0xFF1877F2);
+      default:
+        return const Color(0xFF1877F2);
     }
   }
 
@@ -437,7 +515,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           Icon(icon, color: Colors.blueGrey, size: 20),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(text, style: const TextStyle(fontSize: 15, color: Colors.black87)),
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 15, color: Colors.black87),
+            ),
           ),
         ],
       ),
